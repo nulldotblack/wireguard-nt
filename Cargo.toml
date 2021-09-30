@@ -1,0 +1,14 @@
+[package]
+name = "wireguard-nt"
+version = "0.1.0"
+edition = "2018"
+authors = ["null.black Inc. <opensource@null.black>", "Troy Neubauer <troy@null.black>"]
+repository = "https://github.com/nulldotblack/wireguard-nt"
+readme = "README.md"
+documentation = "https://docs.rs/wireguard-nt/"
+description = "Safe idiomatic bindings to the Wireguard NT C library"
+license = "MIT"
+keywords = ["wireguard", "tap", "tun", "vpn", "windows"]
+categories = ["api-bindings"]
+
+[dependencies]
