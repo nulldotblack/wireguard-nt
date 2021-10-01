@@ -25,12 +25,32 @@ typedef struct _GUID {
     };
 } GUID;
 
-
 #define ULONG64 long long unsigned int
+#define DWORD64 long long int
+#define wchar_t unsigned short
+#define LPWSTR wchar_t*
+#define LPCWSTR wchar_t const*
+#define VOID void
+
+#define INADDR unsigned long
+#define IN6_ADDR unsigned long
+#define IN6_ADDR unsigned char[16]
+#define ADDRESS_FAMILY unsigned short
+
+typedef union _SOCKADDR_INET {
+    SOCKADD
+    
+
+} SOCKADDR_INET;
+
+
+
+#define WORD int
 
 typedef ULONG64 NET_LUID;
 
-#define WINAPI __stdcall
+//#define WINAPI __stdcall
+#define WINAPI
 
 //Begin WinTun definitions:
 
@@ -117,7 +137,7 @@ BOOL WINAPI WireGuardDeleteAdapter(WIREGUARD_ADAPTER_HANDLE Adapter, BOOL *Reboo
  *
  * @return Non-zero to continue iterating adapters; zero to stop.
  */
-typedef BOOL(*WIREGUARD_ENUM_CALLBACK)(WIREGUARD_ADAPTER_HANDLE Adapter, void* Param);
+typedef BOOL(*WIREGUARD_ENUM_CALLBACK)(WIREGUARD_ADAPTER_HANDLE Adapter, LPARAM Param);
 
 /**
  * Enumerates all WireGuard adapters.
@@ -132,7 +152,7 @@ typedef BOOL(*WIREGUARD_ENUM_CALLBACK)(WIREGUARD_ADAPTER_HANDLE Adapter, void* P
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-BOOL WINAPI WireGuardEnumAdapters(LPCWSTR Pool, WIREGUARD_ENUM_CALLBACK Callback, void* Param);
+BOOL WINAPI WireGuardEnumAdapters(LPCWSTR Pool, WIREGUARD_ENUM_CALLBACK Callback, LPARAM Param);
 
 /**
  * Releases WireGuard adapter resources.
