@@ -4,55 +4,13 @@
  */
 
 
-
-//Manually generated file from wintun documentation to tune what bindgen generates
-
-//Types that we need
-typedef unsigned char BOOL;
-typedef unsigned char BYTE;
-typedef void* LPARAM;
-typedef void* HANDLE;
-typedef unsigned short WCHAR;
-typedef unsigned int DWORD;
-
-typedef struct _GUID {
-    union {
-    struct {
-        unsigned long long a;
-        unsigned long long b;
-    };
-    unsigned char Bytes[16];
-    };
-} GUID;
-
-#define ULONG64 long long unsigned int
-#define DWORD64 long long int
-#define wchar_t unsigned short
-#define LPWSTR wchar_t*
-#define LPCWSTR wchar_t const*
-#define VOID void
-
-#define INADDR unsigned long
-#define IN6_ADDR unsigned long
-#define IN6_ADDR unsigned char[16]
-#define ADDRESS_FAMILY unsigned short
-
-typedef union _SOCKADDR_INET {
-    SOCKADD
-    
-
-} SOCKADDR_INET;
-
-
-
-#define WORD int
-
-typedef ULONG64 NET_LUID;
-
-//#define WINAPI __stdcall
-#define WINAPI
-
-//Begin WinTun definitions:
+//Manually generated file from wireguard documentation to tune what bindgen generates
+//Begin wireguard definitions:
+#include <winsock2.h>
+#include <windows.h>
+#include <ipexport.h>
+#include <ifdef.h>
+#include <ws2ipdef.h>
 
 #ifndef ALIGNED
 #    if defined(_MSC_VER)

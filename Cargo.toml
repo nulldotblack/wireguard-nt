@@ -8,7 +8,15 @@ readme = "README.md"
 documentation = "https://docs.rs/wireguard-nt/"
 description = "Safe idiomatic bindings to the Wireguard NT C library"
 license = "MIT"
-keywords = ["wireguard", "tap", "tun", "vpn", "windows"]
+keywords = ["wireguard", "vpn", "windows"]
 categories = ["api-bindings"]
 
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = ["aarch64-pc-windows-msvc", "i686-pc-windows-msvc", "x86_64-pc-windows-msvc"]
+
 [dependencies]
+widestring = "0.4"
+log = "0.4"
+libloading = "0.7"
+rand = "0.8"
