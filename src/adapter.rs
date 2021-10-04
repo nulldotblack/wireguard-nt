@@ -1,3 +1,4 @@
+use crate::util;
 /// Representation of a wireguard adapter with safe idiomatic bindings to the functionality provided by
 /// the WireGuard* C functions.
 ///
@@ -6,13 +7,16 @@
 use crate::util::UnsafeHandle;
 use crate::wireguard_nt_raw;
 
+use std::iter::IntoIterator;
 use std::mem::MaybeUninit;
+use std::net::SocketAddr;
 use std::ptr;
 use std::sync::Arc;
 
+use ipnet::IpNet;
+use rand::Rng;
 use widestring::U16CStr;
 use widestring::U16CString;
-use rand::Rng;
 
 /// Wrapper around a `WIREGUARD_ADAPTER_HANDLE`
 pub struct Adapter {
@@ -25,6 +29,25 @@ pub struct Adapter {
 pub struct CreateData {
     pub adapter: Adapter,
     pub reboot_required: bool,
+}
+
+/// Representation of a WireGuard peer when setting the config
+pub struct SetPeer {
+    pub public_key: Option<[u8; 32]>,
+    pub preshared_key: Option<[u8; 32]>,
+    pub keep_alive: Option<u16>,
+    pub endpoint: SocketAddr,
+    pub allowed_ips: Vec<IpNet>,
+}
+
+pub type RebootRequired = bool;
+
+/// The data required when setting the config for an interface
+pub struct SetInterface<'p, I: IntoIterator<Item = &'p SetPeer>> {
+    pub listen_port: Option<u16>,
+    pub public_key: Option<[u8; 32]>,
+    pub private_key: Option<[u8; 32]>,
+    pub peers: I,
 }
 
 fn encode_utf16(string: &str, max_characters: usize) -> Result<U16CString, crate::WireGuardError> {
@@ -114,7 +137,7 @@ impl Adapter {
 
         let mut reboot_required = 0;
 
-        crate::log::set_default_logger_if_unset(&wireguard);
+        crate::log::set_default_logger_if_unset(wireguard);
 
         //SAFETY: the function is loaded from the wireguard dll properly, we are providing valid
         //pointers, and all the strings are correct null terminated UTF-16. This safety rationale
@@ -128,7 +151,7 @@ impl Adapter {
             )
         };
 
-        if result == ptr::null_mut() {
+        if result.is_null() {
             Err("Failed to crate adapter".into())
         } else {
             Ok(CreateData {
@@ -158,11 +181,12 @@ impl Adapter {
         let pool_utf16 = encode_pool_name(pool)?;
         let name_utf16 = encode_adapter_name(name)?;
 
-        crate::log::set_default_logger_if_unset(&wireguard);
+        crate::log::set_default_logger_if_unset(wireguard);
 
-        let result = unsafe { wireguard.WireGuardOpenAdapter(pool_utf16.as_ptr(), name_utf16.as_ptr()) };
+        let result =
+            unsafe { wireguard.WireGuardOpenAdapter(pool_utf16.as_ptr(), name_utf16.as_ptr()) };
 
-        if result == ptr::null_mut() {
+        if result.is_null() {
             Err("WireGuardOpenAdapter failed".into())
         } else {
             Ok(Adapter {
@@ -213,16 +237,154 @@ impl Adapter {
         Ok(result)
     }
 
+    pub fn set_config<'p, I: IntoIterator<Item = &'p SetPeer>>(&self, config: SetInterface<'p, I>) {
+        use std::mem::{align_of, size_of};
+        use wireguard_nt_raw::*;
+
+        bitflags::bitflags! {
+            struct InterfaceFlags: i32 {
+                const HAS_PUBLIC_KEY =  1 << 0;
+                const HAS_PRIVATE_KEY = 1 << 1;
+                const HAS_LISTEN_PORT = 1 << 2;
+                const REPLACE_PEERS =  1 << 3;
+            }
+        }
+
+        bitflags::bitflags! {
+            struct PeerFlags: i32 {
+                const HAS_PUBLIC_KEY =  1 << 0;
+                const HAS_PRESHARED_KEY = 1 << 1;
+                const HAS_PERSISTENT_KEEPALIVE = 1 << 2;
+                const HAS_ENDPOINT = 1 << 3;
+                const REPLACE_ALLOWED_IPS = 1 << 5;
+                const REMOVE = 1 << 6;
+                const UPDATE = 1 << 7;
+            }
+        }
+
+        let peers: Vec<&'p SetPeer> = config.peers.into_iter().collect();
+        let peer_size: usize = peers
+            .iter()
+            .map(|p| {
+                size_of::<WIREGUARD_PEER>()
+                    + p.allowed_ips.len() * size_of::<WIREGUARD_ALLOWED_IP>()
+            })
+            .sum();
+
+        let size: usize = size_of::<WIREGUARD_INTERFACE>() + peer_size;
+        let align = align_of::<WIREGUARD_INTERFACE>();
+
+        let mut writer = util::StructWriter::new(size, align);
+
+        // Safety:
+        // 1. `writer` has the correct alignment for a `WIREGUARD_INTERFACE`
+        // 2. Nothing has been written to writer so the internal pointer must be aligned
+        let interface: &mut WIREGUARD_INTERFACE = unsafe { writer.write() };
+        interface.Flags = {
+            let mut flags = InterfaceFlags::REPLACE_PEERS;
+            if let Some(private_key) = &config.private_key {
+                flags |= InterfaceFlags::HAS_PRIVATE_KEY;
+                interface.PrivateKey.copy_from_slice(private_key);
+            }
+            if let Some(pub_key) = &config.public_key {
+                flags |= InterfaceFlags::HAS_PUBLIC_KEY;
+                interface.PublicKey.copy_from_slice(pub_key);
+            }
+
+            if let Some(listen_port) = config.listen_port {
+                flags |= InterfaceFlags::HAS_LISTEN_PORT;
+                interface.ListenPort = listen_port;
+            }
+
+            flags.bits
+        };
+        interface.PeersCount = peers.len() as u32;
+
+        for peer in peers {
+            // Safety:
+            // `align_of::<WIREGUARD_INTERFACE` is 8, WIREGUARD_PEER has no special alignment
+            // requirements, and writer is already aligned to hold `WIREGUARD_INTERFACE` structs,
+            // therefore we uphold the alignment requirements of `write`
+            let mut wg_peer: &mut WIREGUARD_PEER = unsafe { writer.write() };
+
+            wg_peer.Flags = {
+                let mut flags = PeerFlags::HAS_ENDPOINT;
+                if let Some(pub_key) = &peer.public_key {
+                    flags |= PeerFlags::HAS_PUBLIC_KEY;
+                    wg_peer.PublicKey.copy_from_slice(pub_key);
+                }
+                if let Some(preshared_key) = &peer.preshared_key {
+                    flags |= PeerFlags::HAS_PRESHARED_KEY;
+                    wg_peer.PresharedKey.copy_from_slice(preshared_key);
+                }
+                if let Some(keep_alive) = peer.keep_alive {
+                    flags |= PeerFlags::HAS_PERSISTENT_KEEPALIVE;
+                    wg_peer.PersistentKeepalive = keep_alive;
+                }
+                flags.bits
+            };
+
+            match peer.endpoint {
+                SocketAddr::V4(v4) => {
+                    let addr = unsafe { std::mem::transmute(v4.ip().octets()) };
+                    wg_peer.Endpoint.Ipv4.sin_family = winapi::shared::ws2def::AF_INET as u16;
+                    wg_peer.Endpoint.Ipv4.sin_port = v4.port();
+                    wg_peer.Endpoint.Ipv4.sin_addr = addr;
+                }
+                SocketAddr::V6(v6) => {
+                    let addr = unsafe { std::mem::transmute(v6.ip().octets()) };
+                    wg_peer.Endpoint.Ipv6.sin6_family = winapi::shared::ws2def::AF_INET as u16;
+                    wg_peer.Endpoint.Ipv6.sin6_port = v6.port();
+                    wg_peer.Endpoint.Ipv6.sin6_addr = addr;
+                }
+            }
+
+            wg_peer.AllowedIPsCount = peer.allowed_ips.len() as u32;
+
+            for allowed_ip in &peer.allowed_ips {
+                // Safety:
+                // Same as above, `writer` is aligned because it was aligned before
+                let mut wg_allowed_ip: &mut WIREGUARD_ALLOWED_IP = unsafe { writer.write() };
+                match allowed_ip {
+                    IpNet::V4(v4) => {
+                        let addr = unsafe { std::mem::transmute(v4.addr().octets()) };
+                        wg_allowed_ip.Address.V4 = addr;
+                        wg_allowed_ip.AddressFamily = winapi::shared::ws2def::AF_INET as u16;
+                    }
+                    IpNet::V6(v6) => {
+                        let addr = unsafe { std::mem::transmute(v6.addr().octets()) };
+                        wg_allowed_ip.Address.V6 = addr;
+                        wg_allowed_ip.AddressFamily = winapi::shared::ws2def::AF_INET as u16;
+                    }
+                }
+            }
+        }
+
+        //Make sure that our allocation math was correct and that we filled all of reader
+        assert!(writer.is_full());
+
+        unsafe {
+            self.wireguard.WireGuardSetConfiguration(
+                self.adapter.0,
+                writer.ptr().cast(),
+                size as u32,
+            )
+        };
+    }
+
     /// Delete an adapter, consuming it in the process
-    /// Returns `Ok(reboot_suggested: bool)` on success
-    pub fn delete(self) -> Result<bool, ()> {
+    ///
+    /// On success a boolean is returned that indicates weather or not SetupAPI suggests a reboot
+    ///
+    /// Otherwise Err(()) is returned
+    // Return type is clear enough
+    #[allow(clippy::result_unit_err)]
+    pub fn delete(self) -> Result<RebootRequired, ()> {
         let mut reboot_required = 0;
 
         let result = unsafe {
-            self.wireguard.WireGuardDeleteAdapter(
-                self.adapter.0,
-                &mut reboot_required as *mut i32,
-            )
+            self.wireguard
+                .WireGuardDeleteAdapter(self.adapter.0, &mut reboot_required as *mut i32)
         };
 
         if result != 0 {
@@ -230,7 +392,7 @@ impl Adapter {
         } else {
             Err(())
         }
-    } 
+    }
 
     /// Returns the name of this adapter. Set by calls to [`Adapter::create`]
     pub fn get_adapter_name(&self) -> String {
@@ -242,7 +404,7 @@ impl Adapter {
 impl Drop for Adapter {
     fn drop(&mut self) {
         //Free adapter on drop
-        //This is why we need an Arc of wireguard 
+        //This is why we need an Arc of wireguard
         unsafe { self.wireguard.WireGuardFreeAdapter(self.adapter.0) };
         self.adapter = UnsafeHandle(ptr::null_mut());
     }

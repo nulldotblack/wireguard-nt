@@ -16,6 +16,7 @@ pub fn set_logger(
 static SET_LOGGER: AtomicBool = AtomicBool::new(false);
 
 /// The logger that is active by default. Logs messages to the log crate
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn default_logger(
     level: wireguard_nt_raw::WIREGUARD_LOGGER_LEVEL,
     _timestamp: wireguard_nt_raw::DWORD64,
