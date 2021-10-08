@@ -139,7 +139,7 @@ BOOL WINAPI WireGuardDeletePoolDriver(LPCWSTR Pool, BOOL *RebootRequired);
  *
  * @param Luid          Pointer to LUID to receive adapter LUID.
  */
-VOID WINAPI WireguardGetAdapterLuid(WIREGUARD_ADAPTER_HANDLE Adapter, NET_LUID *Luid);
+VOID WINAPI WireGuardGetAdapterLUID(WIREGUARD_ADAPTER_HANDLE Adapter, NET_LUID *Luid);
 
 /**
  * Returns the name of the WireGuard adapter.

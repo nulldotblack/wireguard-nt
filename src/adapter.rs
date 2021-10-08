@@ -1,5 +1,6 @@
+use crate::log::AdapterLoggingLevel;
 use crate::util;
-/// Representation of a wireguard adapter with safe idiomatic bindings to the functionality provided by
+/// Representation of a wireGuard adapter with safe idiomatic bindings to the functionality provided by
 /// the WireGuard* C functions.
 ///
 /// The [`Adapter::create`] and [`Adapter::open`] functions serve as the entry point to using
@@ -14,6 +15,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use ipnet::IpNet;
+use ipnet::Ipv4Net;
 use rand::Rng;
 use widestring::U16CStr;
 use widestring::U16CString;
@@ -43,11 +45,11 @@ pub struct SetPeer {
 pub type RebootRequired = bool;
 
 /// The data required when setting the config for an interface
-pub struct SetInterface<'p, I: IntoIterator<Item = &'p SetPeer>> {
+pub struct SetInterface {
     pub listen_port: Option<u16>,
     pub public_key: Option<[u8; 32]>,
     pub private_key: Option<[u8; 32]>,
-    pub peers: I,
+    pub peers: Vec<SetPeer>,
 }
 
 fn encode_utf16(string: &str, max_characters: usize) -> Result<U16CString, crate::WireGuardError> {
@@ -99,6 +101,14 @@ fn get_adapter_name(
 pub struct EnumeratedAdapter {
     pub name: String,
 }
+
+fn win_error(context: &str, error_code: u32) -> Result<(), Box<dyn std::error::Error>> {
+    let e = std::io::Error::from_raw_os_error(error_code as i32);
+    Err(format!("{} - {}", context, e).into())
+}
+
+const WIREGUARD_STATE_DOWN: i32 = 0;
+const WIREGUARD_STATE_UP: i32 = 1;
 
 impl Adapter {
     //TODO: Call get last error for error information on failure and improve error types
@@ -196,7 +206,7 @@ impl Adapter {
         }
     }
 
-    /// Returns a vector of the wintun adapters that exist in a particular pool
+    /// Returns a vector of the WireGuard adapters that exist in a particular pool
     pub fn list_all(
         wireguard: &Arc<wireguard_nt_raw::wireguard>,
         pool: &str,
@@ -237,7 +247,7 @@ impl Adapter {
         Ok(result)
     }
 
-    pub fn set_config<'p, I: IntoIterator<Item = &'p SetPeer>>(&self, config: SetInterface<'p, I>) {
+    pub fn set_config(&self, config: SetInterface) -> bool {
         use std::mem::{align_of, size_of};
         use wireguard_nt_raw::*;
 
@@ -262,8 +272,8 @@ impl Adapter {
             }
         }
 
-        let peers: Vec<&'p SetPeer> = config.peers.into_iter().collect();
-        let peer_size: usize = peers
+        let peer_size: usize = config
+            .peers
             .iter()
             .map(|p| {
                 size_of::<WIREGUARD_PEER>()
@@ -298,9 +308,9 @@ impl Adapter {
 
             flags.bits
         };
-        interface.PeersCount = peers.len() as u32;
+        interface.PeersCount = config.peers.len() as u32;
 
-        for peer in peers {
+        for peer in &config.peers {
             // Safety:
             // `align_of::<WIREGUARD_INTERFACE` is 8, WIREGUARD_PEER has no special alignment
             // requirements, and writer is already aligned to hold `WIREGUARD_INTERFACE` structs,
@@ -324,17 +334,19 @@ impl Adapter {
                 flags.bits
             };
 
+            log::info!("endpoint: {}", &peer.endpoint);
             match peer.endpoint {
                 SocketAddr::V4(v4) => {
                     let addr = unsafe { std::mem::transmute(v4.ip().octets()) };
                     wg_peer.Endpoint.Ipv4.sin_family = winapi::shared::ws2def::AF_INET as u16;
-                    wg_peer.Endpoint.Ipv4.sin_port = v4.port();
+                    //Make sure to put the port in network byte order
+                    wg_peer.Endpoint.Ipv4.sin_port = u16::from_ne_bytes(v4.port().to_be_bytes());
                     wg_peer.Endpoint.Ipv4.sin_addr = addr;
                 }
                 SocketAddr::V6(v6) => {
                     let addr = unsafe { std::mem::transmute(v6.ip().octets()) };
-                    wg_peer.Endpoint.Ipv6.sin6_family = winapi::shared::ws2def::AF_INET as u16;
-                    wg_peer.Endpoint.Ipv6.sin6_port = v6.port();
+                    wg_peer.Endpoint.Ipv6.sin6_family = winapi::shared::ws2def::AF_INET6 as u16;
+                    wg_peer.Endpoint.Ipv4.sin_port = u16::from_ne_bytes(v6.port().to_be_bytes());
                     wg_peer.Endpoint.Ipv6.sin6_addr = addr;
                 }
             }
@@ -350,17 +362,19 @@ impl Adapter {
                         let addr = unsafe { std::mem::transmute(v4.addr().octets()) };
                         wg_allowed_ip.Address.V4 = addr;
                         wg_allowed_ip.AddressFamily = winapi::shared::ws2def::AF_INET as u16;
+                        wg_allowed_ip.Cidr = v4.prefix_len();
                     }
                     IpNet::V6(v6) => {
                         let addr = unsafe { std::mem::transmute(v6.addr().octets()) };
                         wg_allowed_ip.Address.V6 = addr;
-                        wg_allowed_ip.AddressFamily = winapi::shared::ws2def::AF_INET as u16;
+                        wg_allowed_ip.AddressFamily = winapi::shared::ws2def::AF_INET6 as u16;
+                        wg_allowed_ip.Cidr = v6.prefix_len();
                     }
                 }
             }
         }
 
-        //Make sure that our allocation math was correct and that we filled all of reader
+        //Make sure that our allocation math was correct and that we filled all of writer
         assert!(writer.is_full());
 
         unsafe {
@@ -368,8 +382,113 @@ impl Adapter {
                 self.adapter.0,
                 writer.ptr().cast(),
                 size as u32,
-            )
+            ) != 0
+        }
+    }
+
+    /// Assigns this adapter an ip address and adds route(s) so that packets sent to
+    /// within the `interface_addr` ipnet will be sent across the WireGuard VPN
+    pub fn set_default_route(
+        &self,
+        interface_addr: Ipv4Net,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let luid = self.get_luid();
+        unsafe {
+            use winapi::shared::netioapi::{
+                InitializeUnicastIpAddressEntry, MIB_UNICASTIPADDRESS_ROW,
+            };
+            use winapi::shared::nldef::IpDadStatePreferred;
+            use winapi::shared::ws2def::AF_INET;
+
+            use winapi::shared::netioapi::{InitializeIpForwardEntry, MIB_IPFORWARD_ROW2};
+            let mut default_route: MIB_IPFORWARD_ROW2 = std::mem::zeroed();
+            InitializeIpForwardEntry(&mut default_route);
+            default_route.InterfaceLuid = std::mem::transmute(luid);
+            *default_route.DestinationPrefix.Prefix.si_family_mut() = AF_INET as u16;
+            *default_route.NextHop.si_family_mut() = AF_INET as u16;
+            default_route.Metric = 0;
+
+            use winapi::shared::netioapi::{CreateIpForwardEntry2, CreateUnicastIpAddressEntry};
+            use winapi::shared::winerror::{ERROR_OBJECT_ALREADY_EXISTS, ERROR_SUCCESS};
+            let err = CreateIpForwardEntry2(&default_route);
+            if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
+                return win_error("Failed to set default route", err);
+            }
+
+            let mut address_row: MIB_UNICASTIPADDRESS_ROW = std::mem::zeroed();
+            InitializeUnicastIpAddressEntry(&mut address_row);
+            address_row.Address.Ipv4_mut().sin_family = AF_INET as u16;
+            address_row.InterfaceLuid = std::mem::transmute(luid);
+            address_row.OnLinkPrefixLength = interface_addr.prefix_len();
+            address_row.DadState = IpDadStatePreferred;
+            address_row.Address.Ipv4_mut().sin_addr =
+                std::mem::transmute(interface_addr.addr().octets());
+
+            let err = CreateUnicastIpAddressEntry(&address_row);
+            if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
+                return win_error("Failed to set IP interface", err);
+            }
+
+            use winapi::shared::netioapi::{InitializeIpInterfaceEntry, MIB_IPINTERFACE_ROW};
+            let mut ip_interface: MIB_IPINTERFACE_ROW = std::mem::zeroed();
+            InitializeIpInterfaceEntry(&mut ip_interface);
+            ip_interface.InterfaceLuid = std::mem::transmute(luid);
+            ip_interface.Family = AF_INET as u16;
+
+            use winapi::shared::netioapi::{GetIpInterfaceEntry, SetIpInterfaceEntry};
+            let err = GetIpInterfaceEntry(&mut ip_interface);
+            if err != ERROR_SUCCESS {
+                return win_error("Failed to get IP interface", err);
+            }
+            ip_interface.UseAutomaticMetric = 0;
+            ip_interface.Metric = 0;
+            ip_interface.NlMtu = 1420;
+            ip_interface.SitePrefixLength = 0;
+            let err = SetIpInterfaceEntry(&mut ip_interface);
+            if err != ERROR_SUCCESS {
+                return win_error("Failed to set metric and MTU", err);
+            }
+
+            Ok(())
+        }
+    }
+
+    pub fn up(&self) -> bool {
+        unsafe {
+            self.wireguard
+                .WireGuardSetAdapterState(self.adapter.0, WIREGUARD_STATE_UP)
+                != 0
+        }
+    }
+
+    pub fn down(&self) -> bool {
+        unsafe {
+            self.wireguard
+                .WireGuardSetAdapterState(self.adapter.0, WIREGUARD_STATE_DOWN)
+                != 0
+        }
+    }
+
+    pub fn get_luid(&self) -> u64 {
+        let mut x = 0u64;
+        unsafe {
+            self.wireguard
+                .WireGuardGetAdapterLUID(self.adapter.0, std::mem::transmute(&mut x))
         };
+        x
+    }
+
+    pub fn set_logging(&self, level: AdapterLoggingLevel) -> bool {
+        let level = match level {
+            AdapterLoggingLevel::Off => 0,
+            AdapterLoggingLevel::On => 1,
+            AdapterLoggingLevel::OnWithPrefix => 2,
+        };
+        unsafe {
+            self.wireguard
+                .WireGuardSetAdapterLogging(self.adapter.0, level)
+                != 0
+        }
     }
 
     /// Delete an adapter, consuming it in the process
@@ -396,7 +515,7 @@ impl Adapter {
 
     /// Returns the name of this adapter. Set by calls to [`Adapter::create`]
     pub fn get_adapter_name(&self) -> String {
-        // TODO: also expose WintunSetAdapterName
+        // TODO: also expose WireGuardSetAdapterName
         get_adapter_name(&self.wireguard, self.adapter.0)
     }
 }

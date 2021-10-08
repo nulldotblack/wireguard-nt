@@ -24,3 +24,10 @@ bitflags = "1.3"
 libloading = "0.7"
 ipnet = "2.3"
 winapi = { version = "0.3", features = ["ws2def"] }
+
+[dev-dependencies]
+env_logger = "0.9"
+winapi = { version = "0.3", features = ["ws2def", "netioapi", "iptypes", "iphlpapi", "nldef"] }
+base64 = "0.13"
+boringtun = "0.3"
+ipnet = "2.3"

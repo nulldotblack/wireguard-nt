@@ -89,6 +89,7 @@ pub type BOOL = ::std::os::raw::c_int;
 pub type BYTE = ::std::os::raw::c_uchar;
 pub type WORD = ::std::os::raw::c_ushort;
 pub type LONG_PTR = ::std::os::raw::c_longlong;
+pub type ULONG64 = ::std::os::raw::c_ulonglong;
 pub type DWORD64 = ::std::os::raw::c_ulonglong;
 pub type CHAR = ::std::os::raw::c_char;
 pub type WCHAR = wchar_t;
@@ -601,6 +602,123 @@ fn bindgen_test_layout_in6_addr() {
     );
 }
 pub type IN6_ADDR = in6_addr;
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union _NET_LUID_LH {
+    pub Value: ULONG64,
+    pub Info: _NET_LUID_LH__bindgen_ty_1,
+}
+#[repr(C)]
+#[repr(align(8))]
+#[derive(Debug, Copy, Clone)]
+pub struct _NET_LUID_LH__bindgen_ty_1 {
+    pub _bitfield_align_1: [u32; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 8usize]>,
+}
+#[test]
+fn bindgen_test_layout__NET_LUID_LH__bindgen_ty_1() {
+    assert_eq!(
+        ::std::mem::size_of::<_NET_LUID_LH__bindgen_ty_1>(),
+        8usize,
+        concat!("Size of: ", stringify!(_NET_LUID_LH__bindgen_ty_1))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<_NET_LUID_LH__bindgen_ty_1>(),
+        8usize,
+        concat!("Alignment of ", stringify!(_NET_LUID_LH__bindgen_ty_1))
+    );
+}
+impl _NET_LUID_LH__bindgen_ty_1 {
+    #[inline]
+    pub fn Reserved(&self) -> ULONG64 {
+        unsafe { ::std::mem::transmute(self._bitfield_1.get(0usize, 24u8) as u64) }
+    }
+    #[inline]
+    pub fn set_Reserved(&mut self, val: ULONG64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            self._bitfield_1.set(0usize, 24u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn NetLuidIndex(&self) -> ULONG64 {
+        unsafe { ::std::mem::transmute(self._bitfield_1.get(24usize, 24u8) as u64) }
+    }
+    #[inline]
+    pub fn set_NetLuidIndex(&mut self, val: ULONG64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            self._bitfield_1.set(24usize, 24u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn IfType(&self) -> ULONG64 {
+        unsafe { ::std::mem::transmute(self._bitfield_1.get(48usize, 16u8) as u64) }
+    }
+    #[inline]
+    pub fn set_IfType(&mut self, val: ULONG64) {
+        unsafe {
+            let val: u64 = ::std::mem::transmute(val);
+            self._bitfield_1.set(48usize, 16u8, val as u64)
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(
+        Reserved: ULONG64,
+        NetLuidIndex: ULONG64,
+        IfType: ULONG64,
+    ) -> __BindgenBitfieldUnit<[u8; 8usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 8usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 24u8, {
+            let Reserved: u64 = unsafe { ::std::mem::transmute(Reserved) };
+            Reserved as u64
+        });
+        __bindgen_bitfield_unit.set(24usize, 24u8, {
+            let NetLuidIndex: u64 = unsafe { ::std::mem::transmute(NetLuidIndex) };
+            NetLuidIndex as u64
+        });
+        __bindgen_bitfield_unit.set(48usize, 16u8, {
+            let IfType: u64 = unsafe { ::std::mem::transmute(IfType) };
+            IfType as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
+#[test]
+fn bindgen_test_layout__NET_LUID_LH() {
+    assert_eq!(
+        ::std::mem::size_of::<_NET_LUID_LH>(),
+        8usize,
+        concat!("Size of: ", stringify!(_NET_LUID_LH))
+    );
+    assert_eq!(
+        ::std::mem::align_of::<_NET_LUID_LH>(),
+        8usize,
+        concat!("Alignment of ", stringify!(_NET_LUID_LH))
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<_NET_LUID_LH>())).Value as *const _ as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(_NET_LUID_LH),
+            "::",
+            stringify!(Value)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<_NET_LUID_LH>())).Info as *const _ as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(_NET_LUID_LH),
+            "::",
+            stringify!(Info)
+        )
+    );
+}
+pub type NET_LUID_LH = _NET_LUID_LH;
+pub type NET_LUID = NET_LUID_LH;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct sockaddr_in6 {
@@ -1193,6 +1311,10 @@ pub struct wireguard {
         unsafe extern "C" fn(Pool: LPCWSTR, RebootRequired: *mut BOOL) -> BOOL,
         ::libloading::Error,
     >,
+    pub WireGuardGetAdapterLUID: Result<
+        unsafe extern "C" fn(Adapter: WIREGUARD_ADAPTER_HANDLE, Luid: *mut NET_LUID),
+        ::libloading::Error,
+    >,
     pub WireGuardGetAdapterName: Result<
         unsafe extern "C" fn(Adapter: WIREGUARD_ADAPTER_HANDLE, Name: LPWSTR) -> BOOL,
         ::libloading::Error,
@@ -1264,6 +1386,7 @@ impl wireguard {
         let WireGuardDeletePoolDriver = __library
             .get(b"WireGuardDeletePoolDriver\0")
             .map(|sym| *sym);
+        let WireGuardGetAdapterLUID = __library.get(b"WireGuardGetAdapterLUID\0").map(|sym| *sym);
         let WireGuardGetAdapterName = __library.get(b"WireGuardGetAdapterName\0").map(|sym| *sym);
         let WireGuardSetAdapterName = __library.get(b"WireGuardSetAdapterName\0").map(|sym| *sym);
         let WireGuardGetRunningDriverVersion = __library
@@ -1289,6 +1412,7 @@ impl wireguard {
             WireGuardEnumAdapters,
             WireGuardFreeAdapter,
             WireGuardDeletePoolDriver,
+            WireGuardGetAdapterLUID,
             WireGuardGetAdapterName,
             WireGuardSetAdapterName,
             WireGuardGetRunningDriverVersion,
@@ -1360,6 +1484,16 @@ impl wireguard {
             .WireGuardDeletePoolDriver
             .as_ref()
             .expect("Expected function, got error."))(Pool, RebootRequired)
+    }
+    pub unsafe fn WireGuardGetAdapterLUID(
+        &self,
+        Adapter: WIREGUARD_ADAPTER_HANDLE,
+        Luid: *mut NET_LUID,
+    ) -> () {
+        (self
+            .WireGuardGetAdapterLUID
+            .as_ref()
+            .expect("Expected function, got error."))(Adapter, Luid)
     }
     pub unsafe fn WireGuardGetAdapterName(
         &self,

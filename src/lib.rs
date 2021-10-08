@@ -1,6 +1,6 @@
-//! Safe rust idiomatic bindings for the Wireguard NT C library: <https://git.zx2c4.com/wireguard-nt/about>
+//! Safe rust idiomatic bindings for the WireGuard NT C library: <https://git.zx2c4.com/wireguard-nt/about>
 //!
-//! All features of the Wireguard NT library are wrapped using pure rust types and functions to make
+//! All features of the WireGuard NT library are wrapped using pure rust types and functions to make
 //! usage feel ergonomic.  
 //!
 //! # Usage
@@ -19,7 +19,6 @@
 //!
 //! # Example
 //! ```no_run
-//! use std::sync::Arc;
 //!
 //! //Must be run as Administrator because we create network adapters
 //! //Load the wireguard dll file so that we can call the underlying C functions
@@ -79,7 +78,7 @@ use std::sync::Arc;
 /// This is inherently unsafe as a user could simply rename undefined_behavior.dll to wireguard.dll
 /// and do nefarious things inside of its DllMain function. In most cases, a regular wireguard.dll
 /// file which exports all of the required functions for these bindings to work is loaded. Because
-/// Wireguard NT is a well-written and well-tested library, loading a _normal_ wireguard.dll file should be safe.
+/// WireGuard NT is a well-written and well-tested library, loading a _normal_ wireguard.dll file should be safe.
 /// Hoverer one can never be too cautious when loading a dll file.
 ///
 /// For more information see [`libloading`]'s dynamic library safety guarantees: [`libloading`][`libloading::Library::new`]
@@ -95,7 +94,7 @@ pub unsafe fn load() -> Result<Arc<dll>, libloading::Error> {
 /// This is inherently unsafe as a user could simply rename undefined_behavior.dll to wireguard.dll
 /// and do nefarious things inside of its DllMain function. In most cases, a regular wireguard.dll
 /// file which exports all of the required functions for these bindings to work is loaded. Because
-/// Wireguard NT is a well-written and well-tested library, loading a _normal_ wireguard.dll file should be safe.
+/// WireGuard NT is a well-written and well-tested library, loading a _normal_ wireguard.dll file should be safe.
 /// Hoverer one can never be too cautious when loading a dll file.
 ///
 /// For more information see [`libloading`]'s dynamic library safety guarantees: [`libloading`][`libloading::Library::new`]
@@ -106,11 +105,11 @@ where
     Ok(Arc::new(wireguard_nt_raw::wireguard::new(path)?))
 }
 
-/// Attempts to load the Wireguard NT library from an existing [`libloading::Library`].
+/// Attempts to load the WireGuard NT library from an existing [`libloading::Library`].
 ///
 ///
 /// # Safety
-/// This function loads the required Wireguard NT functions using the provided library. Reading a symbol table
+/// This function loads the required WireGuard NT functions using the provided library. Reading a symbol table
 /// of a dynamic library and transmuting the function pointers inside to have the parameters and return
 /// values expected by the functions documented at: <https://git.zx2c4.com/wireguard-nt/about/>
 /// is inherently unsafe.

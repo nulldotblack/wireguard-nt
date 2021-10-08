@@ -13,6 +13,12 @@ pub fn set_logger(
     unsafe { wireguard.WireGuardSetLogger(f) };
 }
 
+pub enum AdapterLoggingLevel {
+    Off,
+    On,
+    OnWithPrefix,
+}
+
 static SET_LOGGER: AtomicBool = AtomicBool::new(false);
 
 /// The logger that is active by default. Logs messages to the log crate

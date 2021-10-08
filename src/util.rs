@@ -55,7 +55,7 @@ impl StructWriter {
     /// 2. If the internal pointer does not meet the alignment requirements of T.
     pub unsafe fn write<T>(&mut self) -> &mut T {
         let size = std::mem::size_of::<T>();
-        if size + self.offset >= self.layout.size() {
+        if size + self.offset > self.layout.size() {
             panic!(
                 "Overflow attempting to write struct of size {}. To allocation size: {}, offset: {}",
                 size,
