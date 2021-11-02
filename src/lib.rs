@@ -1,6 +1,6 @@
 //! Safe rust idiomatic bindings for the WireGuard NT C library: <https://git.zx2c4.com/wireguard-nt/about>
 //!
-//! All features of the WireGuard NT library are wrapped using pure rust types and functions to make
+//! Features of the WireGuard NT library are wrapped using pure rust types and functions to make
 //! usage feel ergonomic.  
 //!
 //! # Usage
@@ -15,7 +15,7 @@
 //! Inside your code load the wireguard.dll signed driver file, downloaded from <https://git.zx2c4.com/wireguard-nt/about>
 //!
 //! Then either call [`Adapter::create`] or [`Adapter::open`] to obtain a wireguard
-//! adapter. Start set its config with [`Adapter::set_config`].
+//! adapter. Start by its config with [`Adapter::set_config`].
 //!
 //! # Example
 //! ```no_run
@@ -124,4 +124,5 @@ where
     )?))
 }
 
+/// The error type
 pub type WireGuardError = Box<dyn std::error::Error>;

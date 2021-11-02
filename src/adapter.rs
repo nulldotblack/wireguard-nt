@@ -7,8 +7,8 @@ use crate::util;
 /// wireguard functionality
 use crate::util::UnsafeHandle;
 use crate::wireguard_nt_raw;
+use crate::WireGuardError;
 
-use std::iter::IntoIterator;
 use std::mem::MaybeUninit;
 use std::net::SocketAddr;
 use std::ptr;
@@ -21,6 +21,8 @@ use widestring::U16CStr;
 use widestring::U16CString;
 
 /// Wrapper around a `WIREGUARD_ADAPTER_HANDLE`
+///
+/// Related functions from WireGuardXXX are functions with an adapter self parameter
 pub struct Adapter {
     adapter: UnsafeHandle<wireguard_nt_raw::WIREGUARD_ADAPTER_HANDLE>,
     wireguard: Arc<wireguard_nt_raw::wireguard>,
@@ -29,16 +31,31 @@ pub struct Adapter {
 /// Holds the newly created adapter and reboot suggestion from the system when a new adapter is
 /// created
 pub struct CreateData {
+    /// The adapter that was created
     pub adapter: Adapter,
-    pub reboot_required: bool,
+
+    /// True if Setup API hints that a reboot is required
+    pub reboot_required: RebootRequired,
 }
 
 /// Representation of a WireGuard peer when setting the config
 pub struct SetPeer {
+    /// The peer's public key
     pub public_key: Option<[u8; 32]>,
+
+    /// A preshared key used to symmetrically encrypt data with this peer
     pub preshared_key: Option<[u8; 32]>,
+
+    /// How often to send a keep alive packet to prevent NATs from blocking UDP packets
+    ///
+    /// Set to None if no keep alive behavior is wanted
     pub keep_alive: Option<u16>,
+
+    /// The address this peer is reachable from using UDP across the internet
     pub endpoint: SocketAddr,
+
+    /// The set of [`IpNet`]'s that dictate what packets are allowed to be sent of received from
+    /// this peer
     pub allowed_ips: Vec<IpNet>,
 }
 
@@ -46,9 +63,18 @@ pub type RebootRequired = bool;
 
 /// The data required when setting the config for an interface
 pub struct SetInterface {
+    /// The port this interface should listen on.
+    /// The default 51820 is used if this is set to `None`
     pub listen_port: Option<u16>,
+
+    /// The public key of this interface.
+    /// If this is `None`, the public key is generated from the private key
     pub public_key: Option<[u8; 32]>,
+
+    /// The private key of this interface
     pub private_key: Option<[u8; 32]>,
+
+    /// The peers that this interface is allowed to communicate with
     pub peers: Vec<SetPeer>,
 }
 
@@ -99,6 +125,7 @@ fn get_adapter_name(
 
 /// Contains information about a single existing adapter
 pub struct EnumeratedAdapter {
+    /// The name of the adapter
     pub name: String,
 }
 
@@ -116,8 +143,6 @@ impl Adapter {
     /// Creates a new wireguard adapter inside the pool `pool` with name `name`
     ///
     /// Optionally a GUID can be specified that will become the GUID of this adapter once created.
-    /// Adapters obtained via this function will be able to return their adapter index via
-    /// [`Adapter::get_adapter_index`]
     pub fn create(
         wireguard: &Arc<wireguard_nt_raw::wireguard>,
         pool: &str,
@@ -130,7 +155,6 @@ impl Adapter {
         let guid = match guid {
             Some(guid) => guid,
             None => {
-                // Use random bytes so that we can identify this adapter in get_adapter_index
                 let mut guid_bytes: [u8; 16] = [0u8; 16];
                 rand::thread_rng().fill(&mut guid_bytes);
                 u128::from_ne_bytes(guid_bytes)
@@ -143,8 +167,6 @@ impl Adapter {
         //the byte order of the segments of the GUID struct that are larger than a byte. Verify
         //that this works as expected
 
-        let guid_ptr = &guid_struct as *const wireguard_nt_raw::GUID;
-
         let mut reboot_required = 0;
 
         crate::log::set_default_logger_if_unset(wireguard);
@@ -156,7 +178,7 @@ impl Adapter {
             wireguard.WireGuardCreateAdapter(
                 pool_utf16.as_ptr(),
                 name_utf16.as_ptr(),
-                guid_ptr,
+                &guid_struct as *const wireguard_nt_raw::GUID,
                 &mut reboot_required as *mut i32,
             )
         };
@@ -175,12 +197,6 @@ impl Adapter {
     }
 
     /// Attempts to open an existing wireguard interface inside `pool` with name `name`.
-    /// Adapters opened via this call will have an unknown GUID meaning [`Adapter::get_adapter_index`]
-    /// will always fail because knowing the adapter's GUID is required to determine its index.
-    /// Currently a workaround is to delete and re-create a new adapter every time one is needed so
-    /// that it gets created with a known GUID, allowing [`Adapter::get_adapter_index`] to works as
-    /// expected. There is likely a way to get the GUID of our adapter using the Windows Registry
-    /// or via the Win32 API, so PR's that solve this issue are always welcome!
     pub fn open(
         wireguard: &Arc<wireguard_nt_raw::wireguard>,
         pool: &str,
@@ -247,7 +263,8 @@ impl Adapter {
         Ok(result)
     }
 
-    pub fn set_config(&self, config: SetInterface) -> bool {
+    /// Sets the wireguard configuration of this adapter
+    pub fn set_config(&self, config: SetInterface) -> Result<(), WireGuardError> {
         use std::mem::{align_of, size_of};
         use wireguard_nt_raw::*;
 
@@ -285,6 +302,8 @@ impl Adapter {
         let align = align_of::<WIREGUARD_INTERFACE>();
 
         let mut writer = util::StructWriter::new(size, align);
+        //Most of this function is writing data into `writer`, in a format that wireguard expects
+        //so that it can decode the data when we call WireGuardSetConfiguration
 
         // Safety:
         // 1. `writer` has the correct alignment for a `WIREGUARD_INTERFACE`
@@ -377,16 +396,21 @@ impl Adapter {
         //Make sure that our allocation math was correct and that we filled all of writer
         assert!(writer.is_full());
 
-        unsafe {
+        let result = unsafe {
             self.wireguard.WireGuardSetConfiguration(
                 self.adapter.0,
                 writer.ptr().cast(),
                 size as u32,
-            ) != 0
+            )
+        };
+
+        match result {
+            0 => Err(format!("WireGuardSetConfiguration failed").into()),
+            _ => Ok(()),
         }
     }
 
-    /// Assigns this adapter an ip address and adds route(s) so that packets sent to
+    /// Assigns this adapter an ip address and adds route(s) so that packets sent
     /// within the `interface_addr` ipnet will be sent across the WireGuard VPN
     pub fn set_default_route(
         &self,
@@ -453,6 +477,7 @@ impl Adapter {
         }
     }
 
+    /// Puts this adapter into the up state
     pub fn up(&self) -> bool {
         unsafe {
             self.wireguard
@@ -461,6 +486,7 @@ impl Adapter {
         }
     }
 
+    /// Puts this adapter into the down state
     pub fn down(&self) -> bool {
         unsafe {
             self.wireguard
@@ -469,6 +495,8 @@ impl Adapter {
         }
     }
 
+    /// Returns the adapter's LUID.
+    /// This is a 64bit unique identifier that windows uses when referencing this adapter
     pub fn get_luid(&self) -> u64 {
         let mut x = 0u64;
         unsafe {
@@ -478,6 +506,9 @@ impl Adapter {
         x
     }
 
+    /// Sets the logging level of this adapter
+    ///
+    /// Log messages will be sent to the current logger (set using [`crate::set_logger`]
     pub fn set_logging(&self, level: AdapterLoggingLevel) -> bool {
         let level = match level {
             AdapterLoggingLevel::Off => 0,

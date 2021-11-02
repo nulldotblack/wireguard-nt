@@ -1,4 +1,5 @@
 use std::{
+    io::{Read, Write},
     net::{Ipv4Addr, SocketAddr},
     time::Duration,
 };
@@ -55,10 +56,13 @@ fn main() {
         Ok(()) => {}
         Err(err) => panic!("Failed to set default route: {}", err),
     }
-    assert!(adapter.set_config(interface));
+    adapter.set_config(interface).unwrap();
     assert!(adapter.up());
 
-    std::thread::sleep(std::time::Duration::from_secs(30));
+    println!("Press enter to exit");
+    let mut _buf = [0u8; 32];
+    let _ = std::io::stdin().read(&mut _buf);
+    println!("Exiting!");
 
     //Delete the adapter when finished.
     adapter.delete().unwrap();
@@ -67,7 +71,6 @@ fn main() {
 /// Gets info from the demo server that can be used to connect.
 /// pub_key is a 32 byte public key that corresponds to the private key that the caller has
 fn get_demo_server_config(pub_key: &[u8]) -> Result<(Vec<u8>, Ipv4Addr, SocketAddr), String> {
-    use std::io::{Read, Write};
     use std::net::{TcpStream, ToSocketAddrs};
     let addrs: Vec<SocketAddr> = "demo.wireguard.com:42912"
         .to_socket_addrs()
@@ -107,7 +110,7 @@ fn get_demo_server_config(pub_key: &[u8]) -> Result<(Vec<u8>, Ipv4Addr, SocketAd
         .parse()
         .map_err(|e| format!("Demo server gave invalid port number: {}", e))?;
 
-    let internal_ip = parts[3]; 
+    let internal_ip = parts[3];
     let internal_ip: Ipv4Addr = internal_ip.parse().unwrap();
 
     Ok((
