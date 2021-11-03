@@ -88,12 +88,10 @@ pub type DWORD = ::std::os::raw::c_ulong;
 pub type BOOL = ::std::os::raw::c_int;
 pub type BYTE = ::std::os::raw::c_uchar;
 pub type WORD = ::std::os::raw::c_ushort;
-pub type LONG_PTR = ::std::os::raw::c_longlong;
 pub type ULONG64 = ::std::os::raw::c_ulonglong;
 pub type DWORD64 = ::std::os::raw::c_ulonglong;
 pub type CHAR = ::std::os::raw::c_char;
 pub type WCHAR = wchar_t;
-pub type LPWSTR = *mut WCHAR;
 pub type LPCWSTR = *const WCHAR;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -157,7 +155,6 @@ fn bindgen_test_layout__GUID() {
     );
 }
 pub type GUID = _GUID;
-pub type LPARAM = LONG_PTR;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct in_addr {
@@ -886,16 +883,6 @@ pub struct _WIREGUARD_ADAPTER {
 }
 #[doc = " A handle representing WireGuard adapter"]
 pub type WIREGUARD_ADAPTER_HANDLE = *mut _WIREGUARD_ADAPTER;
-#[doc = " Called by WireGuardEnumAdapters for each adapter in the pool."]
-#[doc = ""]
-#[doc = " @param Adapter       Adapter handle, which will be freed when this function returns."]
-#[doc = ""]
-#[doc = " @param Param         An application-defined value passed to the WireGuardEnumAdapters."]
-#[doc = ""]
-#[doc = " @return Non-zero to continue iterating adapters; zero to stop."]
-pub type WIREGUARD_ENUM_CALLBACK = ::std::option::Option<
-    unsafe extern "C" fn(Adapter: WIREGUARD_ADAPTER_HANDLE, Param: LPARAM) -> BOOL,
->;
 #[doc = "< Informational"]
 pub const WIREGUARD_LOGGER_LEVEL_WIREGUARD_LOG_INFO: WIREGUARD_LOGGER_LEVEL = 0;
 #[doc = "< Warning"]
@@ -1282,85 +1269,58 @@ pub struct wireguard {
     __library: ::libloading::Library,
     pub WireGuardCreateAdapter: Result<
         unsafe extern "C" fn(
-            Pool: LPCWSTR,
-            Name: LPCWSTR,
-            RequestedGUID: *const GUID,
-            RebootRequired: *mut BOOL,
+            arg1: LPCWSTR,
+            arg2: LPCWSTR,
+            arg3: *const GUID,
         ) -> WIREGUARD_ADAPTER_HANDLE,
         ::libloading::Error,
     >,
     pub WireGuardOpenAdapter: Result<
-        unsafe extern "C" fn(Pool: LPCWSTR, Name: LPCWSTR) -> WIREGUARD_ADAPTER_HANDLE,
+        unsafe extern "C" fn(arg1: LPCWSTR) -> WIREGUARD_ADAPTER_HANDLE,
         ::libloading::Error,
     >,
-    pub WireGuardDeleteAdapter: Result<
-        unsafe extern "C" fn(Adapter: WIREGUARD_ADAPTER_HANDLE, RebootRequired: *mut BOOL) -> BOOL,
-        ::libloading::Error,
-    >,
-    pub WireGuardEnumAdapters: Result<
-        unsafe extern "C" fn(
-            Pool: LPCWSTR,
-            Callback: WIREGUARD_ENUM_CALLBACK,
-            Param: LPARAM,
-        ) -> BOOL,
-        ::libloading::Error,
-    >,
-    pub WireGuardFreeAdapter:
-        Result<unsafe extern "C" fn(Adapter: WIREGUARD_ADAPTER_HANDLE), ::libloading::Error>,
-    pub WireGuardDeletePoolDriver: Result<
-        unsafe extern "C" fn(Pool: LPCWSTR, RebootRequired: *mut BOOL) -> BOOL,
-        ::libloading::Error,
-    >,
+    pub WireGuardCloseAdapter:
+        Result<unsafe extern "C" fn(arg1: WIREGUARD_ADAPTER_HANDLE), ::libloading::Error>,
     pub WireGuardGetAdapterLUID: Result<
-        unsafe extern "C" fn(Adapter: WIREGUARD_ADAPTER_HANDLE, Luid: *mut NET_LUID),
-        ::libloading::Error,
-    >,
-    pub WireGuardGetAdapterName: Result<
-        unsafe extern "C" fn(Adapter: WIREGUARD_ADAPTER_HANDLE, Name: LPWSTR) -> BOOL,
-        ::libloading::Error,
-    >,
-    pub WireGuardSetAdapterName: Result<
-        unsafe extern "C" fn(Adapter: WIREGUARD_ADAPTER_HANDLE, Name: LPCWSTR) -> BOOL,
+        unsafe extern "C" fn(arg1: WIREGUARD_ADAPTER_HANDLE, arg2: *mut NET_LUID),
         ::libloading::Error,
     >,
     pub WireGuardGetRunningDriverVersion:
         Result<unsafe extern "C" fn() -> DWORD, ::libloading::Error>,
+    pub WireGuardDeleteDriver: Result<unsafe extern "C" fn() -> BOOL, ::libloading::Error>,
     pub WireGuardSetLogger:
-        Result<unsafe extern "C" fn(NewLogger: WIREGUARD_LOGGER_CALLBACK), ::libloading::Error>,
+        Result<unsafe extern "C" fn(arg1: WIREGUARD_LOGGER_CALLBACK), ::libloading::Error>,
     pub WireGuardSetAdapterLogging: Result<
         unsafe extern "C" fn(
-            Adapter: WIREGUARD_ADAPTER_HANDLE,
-            LogState: WIREGUARD_ADAPTER_LOG_STATE,
-        ) -> BOOL,
-        ::libloading::Error,
-    >,
-    pub WireGuardSetAdapterState: Result<
-        unsafe extern "C" fn(
-            Adapter: WIREGUARD_ADAPTER_HANDLE,
-            State: WIREGUARD_ADAPTER_STATE,
+            arg1: WIREGUARD_ADAPTER_HANDLE,
+            arg2: WIREGUARD_ADAPTER_LOG_STATE,
         ) -> BOOL,
         ::libloading::Error,
     >,
     pub WireGuardGetAdapterState: Result<
         unsafe extern "C" fn(
-            Adapter: WIREGUARD_ADAPTER_HANDLE,
-            State: *mut WIREGUARD_ADAPTER_STATE,
+            arg1: WIREGUARD_ADAPTER_HANDLE,
+            arg2: *mut WIREGUARD_ADAPTER_STATE,
+        ) -> BOOL,
+        ::libloading::Error,
+    >,
+    pub WireGuardSetAdapterState: Result<
+        unsafe extern "C" fn(arg1: WIREGUARD_ADAPTER_HANDLE, arg2: WIREGUARD_ADAPTER_STATE) -> BOOL,
+        ::libloading::Error,
+    >,
+    pub WireGuardGetConfiguration: Result<
+        unsafe extern "C" fn(
+            arg1: WIREGUARD_ADAPTER_HANDLE,
+            arg2: *mut WIREGUARD_INTERFACE,
+            arg3: *mut DWORD,
         ) -> BOOL,
         ::libloading::Error,
     >,
     pub WireGuardSetConfiguration: Result<
         unsafe extern "C" fn(
-            Adapter: WIREGUARD_ADAPTER_HANDLE,
-            Config: *const WIREGUARD_INTERFACE,
-            Bytes: DWORD,
-        ) -> BOOL,
-        ::libloading::Error,
-    >,
-    pub WireGuardGetConfiguration: Result<
-        unsafe extern "C" fn(
-            adapter: WIREGUARD_ADAPTER_HANDLE,
-            config: *mut WIREGUARD_INTERFACE,
-            bytes: *mut DWORD,
+            arg1: WIREGUARD_ADAPTER_HANDLE,
+            arg2: *const WIREGUARD_INTERFACE,
+            arg3: DWORD,
         ) -> BOOL,
         ::libloading::Error,
     >,
@@ -1380,140 +1340,72 @@ impl wireguard {
         let __library = library.into();
         let WireGuardCreateAdapter = __library.get(b"WireGuardCreateAdapter\0").map(|sym| *sym);
         let WireGuardOpenAdapter = __library.get(b"WireGuardOpenAdapter\0").map(|sym| *sym);
-        let WireGuardDeleteAdapter = __library.get(b"WireGuardDeleteAdapter\0").map(|sym| *sym);
-        let WireGuardEnumAdapters = __library.get(b"WireGuardEnumAdapters\0").map(|sym| *sym);
-        let WireGuardFreeAdapter = __library.get(b"WireGuardFreeAdapter\0").map(|sym| *sym);
-        let WireGuardDeletePoolDriver = __library
-            .get(b"WireGuardDeletePoolDriver\0")
-            .map(|sym| *sym);
+        let WireGuardCloseAdapter = __library.get(b"WireGuardCloseAdapter\0").map(|sym| *sym);
         let WireGuardGetAdapterLUID = __library.get(b"WireGuardGetAdapterLUID\0").map(|sym| *sym);
-        let WireGuardGetAdapterName = __library.get(b"WireGuardGetAdapterName\0").map(|sym| *sym);
-        let WireGuardSetAdapterName = __library.get(b"WireGuardSetAdapterName\0").map(|sym| *sym);
         let WireGuardGetRunningDriverVersion = __library
             .get(b"WireGuardGetRunningDriverVersion\0")
             .map(|sym| *sym);
+        let WireGuardDeleteDriver = __library.get(b"WireGuardDeleteDriver\0").map(|sym| *sym);
         let WireGuardSetLogger = __library.get(b"WireGuardSetLogger\0").map(|sym| *sym);
         let WireGuardSetAdapterLogging = __library
             .get(b"WireGuardSetAdapterLogging\0")
             .map(|sym| *sym);
-        let WireGuardSetAdapterState = __library.get(b"WireGuardSetAdapterState\0").map(|sym| *sym);
         let WireGuardGetAdapterState = __library.get(b"WireGuardGetAdapterState\0").map(|sym| *sym);
-        let WireGuardSetConfiguration = __library
-            .get(b"WireGuardSetConfiguration\0")
-            .map(|sym| *sym);
+        let WireGuardSetAdapterState = __library.get(b"WireGuardSetAdapterState\0").map(|sym| *sym);
         let WireGuardGetConfiguration = __library
             .get(b"WireGuardGetConfiguration\0")
+            .map(|sym| *sym);
+        let WireGuardSetConfiguration = __library
+            .get(b"WireGuardSetConfiguration\0")
             .map(|sym| *sym);
         Ok(wireguard {
             __library,
             WireGuardCreateAdapter,
             WireGuardOpenAdapter,
-            WireGuardDeleteAdapter,
-            WireGuardEnumAdapters,
-            WireGuardFreeAdapter,
-            WireGuardDeletePoolDriver,
+            WireGuardCloseAdapter,
             WireGuardGetAdapterLUID,
-            WireGuardGetAdapterName,
-            WireGuardSetAdapterName,
             WireGuardGetRunningDriverVersion,
+            WireGuardDeleteDriver,
             WireGuardSetLogger,
             WireGuardSetAdapterLogging,
-            WireGuardSetAdapterState,
             WireGuardGetAdapterState,
-            WireGuardSetConfiguration,
+            WireGuardSetAdapterState,
             WireGuardGetConfiguration,
+            WireGuardSetConfiguration,
         })
     }
     pub unsafe fn WireGuardCreateAdapter(
         &self,
-        Pool: LPCWSTR,
-        Name: LPCWSTR,
-        RequestedGUID: *const GUID,
-        RebootRequired: *mut BOOL,
+        arg1: LPCWSTR,
+        arg2: LPCWSTR,
+        arg3: *const GUID,
     ) -> WIREGUARD_ADAPTER_HANDLE {
         (self
             .WireGuardCreateAdapter
             .as_ref()
-            .expect("Expected function, got error."))(
-            Pool, Name, RequestedGUID, RebootRequired
-        )
+            .expect("Expected function, got error."))(arg1, arg2, arg3)
     }
-    pub unsafe fn WireGuardOpenAdapter(
-        &self,
-        Pool: LPCWSTR,
-        Name: LPCWSTR,
-    ) -> WIREGUARD_ADAPTER_HANDLE {
+    pub unsafe fn WireGuardOpenAdapter(&self, arg1: LPCWSTR) -> WIREGUARD_ADAPTER_HANDLE {
         (self
             .WireGuardOpenAdapter
             .as_ref()
-            .expect("Expected function, got error."))(Pool, Name)
+            .expect("Expected function, got error."))(arg1)
     }
-    pub unsafe fn WireGuardDeleteAdapter(
-        &self,
-        Adapter: WIREGUARD_ADAPTER_HANDLE,
-        RebootRequired: *mut BOOL,
-    ) -> BOOL {
+    pub unsafe fn WireGuardCloseAdapter(&self, arg1: WIREGUARD_ADAPTER_HANDLE) -> () {
         (self
-            .WireGuardDeleteAdapter
+            .WireGuardCloseAdapter
             .as_ref()
-            .expect("Expected function, got error."))(Adapter, RebootRequired)
-    }
-    pub unsafe fn WireGuardEnumAdapters(
-        &self,
-        Pool: LPCWSTR,
-        Callback: WIREGUARD_ENUM_CALLBACK,
-        Param: LPARAM,
-    ) -> BOOL {
-        (self
-            .WireGuardEnumAdapters
-            .as_ref()
-            .expect("Expected function, got error."))(Pool, Callback, Param)
-    }
-    pub unsafe fn WireGuardFreeAdapter(&self, Adapter: WIREGUARD_ADAPTER_HANDLE) -> () {
-        (self
-            .WireGuardFreeAdapter
-            .as_ref()
-            .expect("Expected function, got error."))(Adapter)
-    }
-    pub unsafe fn WireGuardDeletePoolDriver(
-        &self,
-        Pool: LPCWSTR,
-        RebootRequired: *mut BOOL,
-    ) -> BOOL {
-        (self
-            .WireGuardDeletePoolDriver
-            .as_ref()
-            .expect("Expected function, got error."))(Pool, RebootRequired)
+            .expect("Expected function, got error."))(arg1)
     }
     pub unsafe fn WireGuardGetAdapterLUID(
         &self,
-        Adapter: WIREGUARD_ADAPTER_HANDLE,
-        Luid: *mut NET_LUID,
+        arg1: WIREGUARD_ADAPTER_HANDLE,
+        arg2: *mut NET_LUID,
     ) -> () {
         (self
             .WireGuardGetAdapterLUID
             .as_ref()
-            .expect("Expected function, got error."))(Adapter, Luid)
-    }
-    pub unsafe fn WireGuardGetAdapterName(
-        &self,
-        Adapter: WIREGUARD_ADAPTER_HANDLE,
-        Name: LPWSTR,
-    ) -> BOOL {
-        (self
-            .WireGuardGetAdapterName
-            .as_ref()
-            .expect("Expected function, got error."))(Adapter, Name)
-    }
-    pub unsafe fn WireGuardSetAdapterName(
-        &self,
-        Adapter: WIREGUARD_ADAPTER_HANDLE,
-        Name: LPCWSTR,
-    ) -> BOOL {
-        (self
-            .WireGuardSetAdapterName
-            .as_ref()
-            .expect("Expected function, got error."))(Adapter, Name)
+            .expect("Expected function, got error."))(arg1, arg2)
     }
     pub unsafe fn WireGuardGetRunningDriverVersion(&self) -> DWORD {
         (self
@@ -1521,62 +1413,68 @@ impl wireguard {
             .as_ref()
             .expect("Expected function, got error."))()
     }
-    pub unsafe fn WireGuardSetLogger(&self, NewLogger: WIREGUARD_LOGGER_CALLBACK) -> () {
+    pub unsafe fn WireGuardDeleteDriver(&self) -> BOOL {
+        (self
+            .WireGuardDeleteDriver
+            .as_ref()
+            .expect("Expected function, got error."))()
+    }
+    pub unsafe fn WireGuardSetLogger(&self, arg1: WIREGUARD_LOGGER_CALLBACK) -> () {
         (self
             .WireGuardSetLogger
             .as_ref()
-            .expect("Expected function, got error."))(NewLogger)
+            .expect("Expected function, got error."))(arg1)
     }
     pub unsafe fn WireGuardSetAdapterLogging(
         &self,
-        Adapter: WIREGUARD_ADAPTER_HANDLE,
-        LogState: WIREGUARD_ADAPTER_LOG_STATE,
+        arg1: WIREGUARD_ADAPTER_HANDLE,
+        arg2: WIREGUARD_ADAPTER_LOG_STATE,
     ) -> BOOL {
         (self
             .WireGuardSetAdapterLogging
             .as_ref()
-            .expect("Expected function, got error."))(Adapter, LogState)
-    }
-    pub unsafe fn WireGuardSetAdapterState(
-        &self,
-        Adapter: WIREGUARD_ADAPTER_HANDLE,
-        State: WIREGUARD_ADAPTER_STATE,
-    ) -> BOOL {
-        (self
-            .WireGuardSetAdapterState
-            .as_ref()
-            .expect("Expected function, got error."))(Adapter, State)
+            .expect("Expected function, got error."))(arg1, arg2)
     }
     pub unsafe fn WireGuardGetAdapterState(
         &self,
-        Adapter: WIREGUARD_ADAPTER_HANDLE,
-        State: *mut WIREGUARD_ADAPTER_STATE,
+        arg1: WIREGUARD_ADAPTER_HANDLE,
+        arg2: *mut WIREGUARD_ADAPTER_STATE,
     ) -> BOOL {
         (self
             .WireGuardGetAdapterState
             .as_ref()
-            .expect("Expected function, got error."))(Adapter, State)
+            .expect("Expected function, got error."))(arg1, arg2)
     }
-    pub unsafe fn WireGuardSetConfiguration(
+    pub unsafe fn WireGuardSetAdapterState(
         &self,
-        Adapter: WIREGUARD_ADAPTER_HANDLE,
-        Config: *const WIREGUARD_INTERFACE,
-        Bytes: DWORD,
+        arg1: WIREGUARD_ADAPTER_HANDLE,
+        arg2: WIREGUARD_ADAPTER_STATE,
     ) -> BOOL {
         (self
-            .WireGuardSetConfiguration
+            .WireGuardSetAdapterState
             .as_ref()
-            .expect("Expected function, got error."))(Adapter, Config, Bytes)
+            .expect("Expected function, got error."))(arg1, arg2)
     }
     pub unsafe fn WireGuardGetConfiguration(
         &self,
-        adapter: WIREGUARD_ADAPTER_HANDLE,
-        config: *mut WIREGUARD_INTERFACE,
-        bytes: *mut DWORD,
+        arg1: WIREGUARD_ADAPTER_HANDLE,
+        arg2: *mut WIREGUARD_INTERFACE,
+        arg3: *mut DWORD,
     ) -> BOOL {
         (self
             .WireGuardGetConfiguration
             .as_ref()
-            .expect("Expected function, got error."))(adapter, config, bytes)
+            .expect("Expected function, got error."))(arg1, arg2, arg3)
+    }
+    pub unsafe fn WireGuardSetConfiguration(
+        &self,
+        arg1: WIREGUARD_ADAPTER_HANDLE,
+        arg2: *const WIREGUARD_INTERFACE,
+        arg3: DWORD,
+    ) -> BOOL {
+        (self
+            .WireGuardSetConfiguration
+            .as_ref()
+            .expect("Expected function, got error."))(arg1, arg2, arg3)
     }
 }

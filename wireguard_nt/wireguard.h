@@ -3,14 +3,17 @@
  * Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
  */
 
+#pragma once
 
-//Manually generated file from wireguard documentation to tune what bindgen generates
-//Begin wireguard definitions:
 #include <winsock2.h>
 #include <windows.h>
 #include <ipexport.h>
 #include <ifdef.h>
 #include <ws2ipdef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef ALIGNED
 #    if defined(_MSC_VER)
@@ -36,16 +39,12 @@
 typedef struct _WIREGUARD_ADAPTER *WIREGUARD_ADAPTER_HANDLE;
 
 /**
- * Maximum pool name length including zero terminator
- */
-#define WIREGUARD_MAX_POOL 256
-
-/**
  * Creates a new WireGuard adapter.
  *
- * @param Pool          Name of the adapter pool. Zero-terminated string of up to WIREGUARD_MAX_POOL-1 characters.
- *
  * @param Name          The requested name of the adapter. Zero-terminated string of up to MAX_ADAPTER_NAME-1
+ *                      characters.
+ *
+ * @param TunnelType    Name of the adapter tunnel type. Zero-terminated string of up to MAX_ADAPTER_NAME-1
  *                      characters.
  *
  * @param RequestedGUID The GUID of the created network adapter, which then influences NLA generation deterministically.
@@ -53,117 +52,55 @@ typedef struct _WIREGUARD_ADAPTER *WIREGUARD_ADAPTER_HANDLE;
  *                      created for each new adapter. It is called "requested" GUID because the API it uses is
  *                      completely undocumented, and so there could be minor interesting complications with its usage.
  *
- * @param RebootRequired  Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
- *
- * @return If the function succeeds, the return value is the adapter handle. Must be released with WireGuardFreeAdapter.
- * If the function fails, the return value is NULL. To get extended error information, call GetLastError.
+ * @return If the function succeeds, the return value is the adapter handle. Must be released with
+ * WireGuardCloseAdapter. If the function fails, the return value is NULL. To get extended error information, call
+ * GetLastError.
  */
-WIREGUARD_ADAPTER_HANDLE WINAPI WireGuardCreateAdapter(LPCWSTR Pool, LPCWSTR Name, const GUID *RequestedGUID, BOOL *RebootRequired);
+typedef _Must_inspect_result_
+        _Return_type_success_(return != NULL)
+_Post_maybenull_
+WIREGUARD_ADAPTER_HANDLE(WINAPI WIREGUARD_CREATE_ADAPTER_FUNC)
+(_In_z_ LPCWSTR Name, _In_z_ LPCWSTR TunnelType, _In_opt_ const GUID *RequestedGUID);
 
 /**
  * Opens an existing WireGuard adapter.
  *
- * @param Pool          Name of the adapter pool. Zero-terminated string of up to WIREGUARD_MAX_POOL-1 characters.
+ * @param Name          The requested name of the adapter. Zero-terminated string of up to MAX_ADAPTER_NAME-1
+ *                      characters.
  *
- * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
- *
- * @return If the function succeeds, the return value is adapter handle. Must be released with WireGuardFreeAdapter. If
- * the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors
- * include the following: ERROR_FILE_NOT_FOUND if adapter with given name is not found; ERROR_ALREADY_EXISTS if adapter
- * is found but not a WireGuard-class or not a member of the pool
+ * @return If the function succeeds, the return value is the adapter handle. Must be released with
+ * WireGuardCloseAdapter. If the function fails, the return value is NULL. To get extended error information, call
+ * GetLastError.
  */
-WIREGUARD_ADAPTER_HANDLE WINAPI WireGuardOpenAdapter(LPCWSTR Pool, LPCWSTR Name);
+typedef _Must_inspect_result_
+        _Return_type_success_(return != NULL)
+_Post_maybenull_
+WIREGUARD_ADAPTER_HANDLE(WINAPI WIREGUARD_OPEN_ADAPTER_FUNC)(_In_z_ LPCWSTR Name);
 
 /**
- * Deletes a WireGuard adapter.
+ * Releases WireGuard adapter resources and, if adapter was created with WireGuardCreateAdapter, removes adapter.
  *
- * @param Adapter         Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter.
- *
- * @param RebootRequired  Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
+ * @param Adapter       Adapter handle obtained with WireGuardCreateAdapter or WireGuardOpenAdapter.
+ */
+typedef VOID(WINAPI WIREGUARD_CLOSE_ADAPTER_FUNC)(_In_opt_ WIREGUARD_ADAPTER_HANDLE Adapter);
+
+/**
+ * Deletes the WireGuard driver if there are no more adapters in use.
  *
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-BOOL WINAPI WireGuardDeleteAdapter(WIREGUARD_ADAPTER_HANDLE Adapter, BOOL *RebootRequired);
-
-/**
- * Called by WireGuardEnumAdapters for each adapter in the pool.
- *
- * @param Adapter       Adapter handle, which will be freed when this function returns.
- *
- * @param Param         An application-defined value passed to the WireGuardEnumAdapters.
- *
- * @return Non-zero to continue iterating adapters; zero to stop.
- */
-typedef BOOL(*WIREGUARD_ENUM_CALLBACK)(WIREGUARD_ADAPTER_HANDLE Adapter, LPARAM Param);
-
-/**
- * Enumerates all WireGuard adapters.
- *
- * @param Pool          Name of the adapter pool. Zero-terminated string of up to WIREGUARD_MAX_POOL-1 characters.
- *
- * @param Callback      Callback function. To continue enumeration, the callback function must return TRUE; to stop
- *                      enumeration, it must return FALSE.
- *
- * @param Param         An application-defined value to be passed to the callback function.
- *
- * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError.
- */
-BOOL WINAPI WireGuardEnumAdapters(LPCWSTR Pool, WIREGUARD_ENUM_CALLBACK Callback, LPARAM Param);
-
-/**
- * Releases WireGuard adapter resources.
- *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter.
- */
-VOID WINAPI WireGuardFreeAdapter(WIREGUARD_ADAPTER_HANDLE Adapter);
-
-/**
- * Deletes all WireGuard adapters in a pool and if there are no more adapters in any other pools, also removes WireGuard
- * from the driver store, usually called by uninstallers.
- *
- * @param Pool            Name of the adapter pool. Zero-terminated string of up to WIREGUARD_MAX_POOL-1 characters.
- *
- * @param RebootRequired  Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
- *
- * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError.
- */
-BOOL WINAPI WireGuardDeletePoolDriver(LPCWSTR Pool, BOOL *RebootRequired);
+typedef _Return_type_success_(return != FALSE)
+BOOL(WINAPI WIREGUARD_DELETE_DRIVER_FUNC)(VOID);
 
 /**
  * Returns the LUID of the adapter.
  *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter
+ * @param Adapter       Adapter handle obtained with WireGuardCreateAdapter or WireGuardOpenAdapter
  *
  * @param Luid          Pointer to LUID to receive adapter LUID.
  */
-VOID WINAPI WireGuardGetAdapterLUID(WIREGUARD_ADAPTER_HANDLE Adapter, NET_LUID *Luid);
-
-/**
- * Returns the name of the WireGuard adapter.
- *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter
- *
- * @param Name          Pointer to a string to receive adapter name
- *
- * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError.
- */
-BOOL WINAPI WireGuardGetAdapterName(WIREGUARD_ADAPTER_HANDLE Adapter, LPWSTR Name);
-
-/**
- * Sets name of the WireGuard adapter.
- *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter
- *
- * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
- *
- * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError.
- */
-BOOL WINAPI WireGuardSetAdapterName(WIREGUARD_ADAPTER_HANDLE Adapter, LPCWSTR Name);
+typedef VOID(WINAPI WIREGUARD_GET_ADAPTER_LUID_FUNC)(_In_ WIREGUARD_ADAPTER_HANDLE Adapter, _Out_ NET_LUID *Luid);
 
 /**
  * Determines the version of the WireGuard driver currently loaded.
@@ -172,7 +109,8 @@ BOOL WINAPI WireGuardSetAdapterName(WIREGUARD_ADAPTER_HANDLE Adapter, LPCWSTR Na
  *         zero. To get extended error information, call GetLastError. Possible errors include the following:
  *         ERROR_FILE_NOT_FOUND  WireGuard not loaded
  */
-DWORD WINAPI WireGuardGetRunningDriverVersion(VOID);
+typedef _Return_type_success_(return != 0)
+DWORD(WINAPI WIREGUARD_GET_RUNNING_DRIVER_VERSION_FUNC)(VOID);
 
 /**
  * Determines the level of logging, passed to WIREGUARD_LOGGER_CALLBACK.
@@ -193,7 +131,10 @@ typedef enum
  *
  * @param Message       Message text.
  */
-typedef VOID(*WIREGUARD_LOGGER_CALLBACK)(WIREGUARD_LOGGER_LEVEL Level, DWORD64 Timestamp, LPCWSTR Message);
+typedef VOID(CALLBACK *WIREGUARD_LOGGER_CALLBACK)(
+_In_ WIREGUARD_LOGGER_LEVEL Level,
+_In_ DWORD64 Timestamp,
+_In_z_ LPCWSTR Message);
 
 /**
  * Sets logger callback function.
@@ -202,7 +143,7 @@ typedef VOID(*WIREGUARD_LOGGER_CALLBACK)(WIREGUARD_LOGGER_LEVEL Level, DWORD64 T
  *                      threads concurrently. Should the logging require serialization, you must handle serialization in
  *                      NewLogger. Set to NULL to disable.
  */
-VOID WINAPI WireGuardSetLogger(WIREGUARD_LOGGER_CALLBACK NewLogger);
+typedef VOID(WINAPI WIREGUARD_SET_LOGGER_FUNC)(_In_ WIREGUARD_LOGGER_CALLBACK NewLogger);
 
 /**
  * Whether and how logs from the driver are collected for the callback function.
@@ -215,16 +156,18 @@ typedef enum
 } WIREGUARD_ADAPTER_LOG_STATE;
 
 /**
- * Sets whether and how the adapter logs to the logger previously set up with WireGuardSetLoggerFunc.
+ * Sets whether and how the adapter logs to the logger previously set up with WireGuardSetLogger.
  *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter
+ * @param Adapter       Adapter handle obtained with WireGuardCreateAdapter or WireGuardOpenAdapter
  *
  * @param LogState      Adapter logging state.
  *
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-BOOL WINAPI WireGuardSetAdapterLogging(WIREGUARD_ADAPTER_HANDLE Adapter, WIREGUARD_ADAPTER_LOG_STATE LogState);
+typedef _Return_type_success_(return != FALSE)
+BOOL(WINAPI WIREGUARD_SET_ADAPTER_LOGGING_FUNC)
+(_In_ WIREGUARD_ADAPTER_HANDLE Adapter, _In_ WIREGUARD_ADAPTER_LOG_STATE LogState);
 
 /**
  * Determines the state of the adapter.
@@ -238,39 +181,44 @@ typedef enum
 /**
  * Sets the adapter state of the WireGuard adapter. Note: sockets are owned by the process that sets the state to up.
  *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter
+ * @param Adapter       Adapter handle obtained with WireGuardCreateAdapter or WireGuardOpenAdapter
  *
  * @param State         Adapter state.
  *
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-BOOL WINAPI WireGuardSetAdapterState(WIREGUARD_ADAPTER_HANDLE Adapter, WIREGUARD_ADAPTER_STATE State);
+typedef _Return_type_success_(return != FALSE)
+BOOL(WINAPI WIREGUARD_SET_ADAPTER_STATE_FUNC)
+(_In_ WIREGUARD_ADAPTER_HANDLE Adapter, _In_ WIREGUARD_ADAPTER_STATE State);
 
 /**
  * Gets the adapter state of the WireGuard adapter.
  *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter
+ * @param Adapter       Adapter handle obtained with WireGuardCreateAdapter or WireGuardOpenAdapter
  *
  * @param State         Pointer to adapter state.
  *
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-BOOL WINAPI WireGuardGetAdapterState(WIREGUARD_ADAPTER_HANDLE Adapter, WIREGUARD_ADAPTER_STATE* State);
+typedef _Must_inspect_result_
+        _Return_type_success_(return != FALSE)
+BOOL(WINAPI WIREGUARD_GET_ADAPTER_STATE_FUNC)
+(_In_ WIREGUARD_ADAPTER_HANDLE Adapter, _Out_ WIREGUARD_ADAPTER_STATE *State);
 
 #define WIREGUARD_KEY_LENGTH 32
 
 typedef struct _WIREGUARD_ALLOWED_IP WIREGUARD_ALLOWED_IP;
 struct ALIGNED(8) _WIREGUARD_ALLOWED_IP
 {
-    union
-    {
-        IN_ADDR V4;
-        IN6_ADDR V6;
-    } Address;                    /**< IP address */
-    ADDRESS_FAMILY AddressFamily; /**< Address family, either AF_INET or AF_INET6 */
-    BYTE Cidr;                    /**< CIDR of allowed IPs */
+union
+{
+    IN_ADDR V4;
+    IN6_ADDR V6;
+} Address;                    /**< IP address */
+ADDRESS_FAMILY AddressFamily; /**< Address family, either AF_INET or AF_INET6 */
+BYTE Cidr;                    /**< CIDR of allowed IPs */
 };
 
 typedef enum
@@ -287,16 +235,16 @@ typedef enum
 typedef struct _WIREGUARD_PEER WIREGUARD_PEER;
 struct ALIGNED(8) _WIREGUARD_PEER
 {
-    WIREGUARD_PEER_FLAG Flags;               /**< Bitwise combination of flags */
-    DWORD Reserved;                          /**< Reserved; must be zero */
-    BYTE PublicKey[WIREGUARD_KEY_LENGTH];    /**< Public key, the peer's primary identifier */
-    BYTE PresharedKey[WIREGUARD_KEY_LENGTH]; /**< Preshared key for additional layer of post-quantum resistance */
-    WORD PersistentKeepalive;                /**< Seconds interval, or 0 to disable */
-    SOCKADDR_INET Endpoint;                  /**< Endpoint, with IP address and UDP port number*/
-    DWORD64 TxBytes;                         /**< Number of bytes transmitted */
-    DWORD64 RxBytes;                         /**< Number of bytes received */
-    DWORD64 LastHandshake;                   /**< Time of the last handshake, in 100ns intervals since 1601-01-01 UTC */
-    DWORD AllowedIPsCount;                   /**< Number of allowed IP structs following this struct */
+WIREGUARD_PEER_FLAG Flags;               /**< Bitwise combination of flags */
+DWORD Reserved;                          /**< Reserved; must be zero */
+BYTE PublicKey[WIREGUARD_KEY_LENGTH];    /**< Public key, the peer's primary identifier */
+BYTE PresharedKey[WIREGUARD_KEY_LENGTH]; /**< Preshared key for additional layer of post-quantum resistance */
+WORD PersistentKeepalive;                /**< Seconds interval, or 0 to disable */
+SOCKADDR_INET Endpoint;                  /**< Endpoint, with IP address and UDP port number*/
+DWORD64 TxBytes;                         /**< Number of bytes transmitted */
+DWORD64 RxBytes;                         /**< Number of bytes received */
+DWORD64 LastHandshake;                   /**< Time of the last handshake, in 100ns intervals since 1601-01-01 UTC */
+DWORD AllowedIPsCount;                   /**< Number of allowed IP structs following this struct */
 };
 
 typedef enum
@@ -310,17 +258,17 @@ typedef enum
 typedef struct _WIREGUARD_INTERFACE WIREGUARD_INTERFACE;
 struct ALIGNED(8) _WIREGUARD_INTERFACE
 {
-    WIREGUARD_INTERFACE_FLAG Flags;        /**< Bitwise combination of flags */
-    WORD ListenPort;                       /**< Port for UDP listen socket, or 0 to choose randomly */
-    BYTE PrivateKey[WIREGUARD_KEY_LENGTH]; /**< Private key of interface */
-    BYTE PublicKey[WIREGUARD_KEY_LENGTH];  /**< Corresponding public key of private key */
-    DWORD PeersCount;                      /**< Number of peer structs following this struct */
+WIREGUARD_INTERFACE_FLAG Flags;        /**< Bitwise combination of flags */
+WORD ListenPort;                       /**< Port for UDP listen socket, or 0 to choose randomly */
+BYTE PrivateKey[WIREGUARD_KEY_LENGTH]; /**< Private key of interface */
+BYTE PublicKey[WIREGUARD_KEY_LENGTH];  /**< Corresponding public key of private key */
+DWORD PeersCount;                      /**< Number of peer structs following this struct */
 };
 
 /**
  * Sets the configuration of the WireGuard adapter.
  *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter
+ * @param Adapter       Adapter handle obtained with WireGuardCreateAdapter or WireGuardOpenAdapter
  *
  * @param Config        Configuration for the adapter.
  *
@@ -329,12 +277,14 @@ struct ALIGNED(8) _WIREGUARD_INTERFACE
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-BOOL WINAPI WireGuardSetConfiguration(WIREGUARD_ADAPTER_HANDLE Adapter, const WIREGUARD_INTERFACE *Config, DWORD Bytes);
+typedef _Return_type_success_(return != FALSE)
+BOOL(WINAPI WIREGUARD_SET_CONFIGURATION_FUNC)
+(_In_ WIREGUARD_ADAPTER_HANDLE Adapter, _In_reads_bytes_(Bytes) const WIREGUARD_INTERFACE *Config, _In_ DWORD Bytes);
 
 /**
  * Gets the configuration of the WireGuard adapter.
  *
- * @param Adapter       Adapter handle obtained with WireGuardOpenAdapter or WireGuardCreateAdapter
+ * @param Adapter       Adapter handle obtained with WireGuardCreateAdapter or WireGuardOpenAdapter
  *
  * @param Config        Configuration for the adapter.
  *
@@ -344,6 +294,15 @@ BOOL WINAPI WireGuardSetConfiguration(WIREGUARD_ADAPTER_HANDLE Adapter, const WI
  *         get extended error information, call GetLastError, which if ERROR_MORE_DATA, Bytes is updated with the
  *         required size.
  */
-BOOL WINAPI WireGuardGetConfiguration(WIREGUARD_ADAPTER_HANDLE adapter, WIREGUARD_INTERFACE *config, DWORD *bytes);
+typedef _Must_inspect_result_
+        _Return_type_success_(return != FALSE)
+BOOL(WINAPI WIREGUARD_GET_CONFIGURATION_FUNC)
+(_In_ WIREGUARD_ADAPTER_HANDLE Adapter,
+_Out_writes_bytes_all_(*Bytes) WIREGUARD_INTERFACE *Config,
+        _Inout_ DWORD *Bytes);
 
 #pragma warning(pop)
+
+#ifdef __cplusplus
+}
+#endif
