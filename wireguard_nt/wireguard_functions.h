@@ -1,3 +1,6 @@
+// info about function names taken from
+// https://git.zx2c4.com/wireguard-nt/tree/example/example.c
+
 #include "wireguard.h"
 
 WIREGUARD_CREATE_ADAPTER_FUNC WireGuardCreateAdapter;
