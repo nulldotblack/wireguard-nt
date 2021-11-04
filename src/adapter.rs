@@ -26,17 +26,6 @@ use widestring::U16CString;
 pub struct Adapter {
     adapter: UnsafeHandle<wireguard_nt_raw::WIREGUARD_ADAPTER_HANDLE>,
     wireguard: Arc<wireguard_nt_raw::wireguard>,
-    allowed_ips: Vec<IpNet>,
-}
-
-/// Holds the newly created adapter and reboot suggestion from the system when a new adapter is
-/// created
-pub struct CreateData {
-    /// The adapter that was created
-    pub adapter: Adapter,
-
-    /// True if Setup API hints that a reboot is required
-    pub reboot_required: RebootRequired,
 }
 
 /// Representation of a WireGuard peer when setting the config
@@ -84,8 +73,8 @@ fn encode_utf16(string: &str, max_characters: usize) -> Result<U16CString, crate
     if utf16.len() >= max_characters {
         //max_characters is the maximum number of characters including the null terminator. And .len() measures the
         //number of characters (excluding the null terminator). Therefore we can hold a string with
-        //max_characters - 1 because the null terminator sits in the last element. However a string
-        //of length max_characters needs max_characters + 1 to store the null terminator the >=
+        //max_characters - 1 because the null terminator sits in the last element. A string
+        //of length max_characters needs max_characters + 1 to store the null terminator so the >=
         //check holds
         Err(format!(
             //TODO: Better error handling
@@ -105,23 +94,6 @@ fn encode_pool_name(name: &str) -> Result<U16CString, crate::WireGuardError> {
 
 fn encode_adapter_name(name: &str) -> Result<U16CString, crate::WireGuardError> {
     encode_utf16(name, crate::MAX_POOL)
-}
-
-fn get_adapter_name(
-    wireguard: &Arc<wireguard_nt_raw::wireguard>,
-    adapter: wireguard_nt_raw::WIREGUARD_ADAPTER_HANDLE,
-) -> String {
-    let mut name = MaybeUninit::<[u16; crate::MAX_POOL as usize]>::uninit();
-
-    //SAFETY: name is a allocated on the stack above therefore it must be valid, non-null and
-    //aligned for u16
-    let first = unsafe { *name.as_mut_ptr() }.as_mut_ptr();
-    //Write default null terminator in case WireGuardGetAdapterName leaves name unchanged
-    unsafe { first.write(0u16) };
-    unsafe { wireguard.WireGuardGetAdapterName(adapter, first) };
-
-    //SAFETY: first is a valid, non-null, aligned, null terminated pointer
-    unsafe { U16CStr::from_ptr_str(first) }.to_string_lossy()
 }
 
 /// Contains information about a single existing adapter
@@ -149,7 +121,7 @@ impl Adapter {
         pool: &str,
         name: &str,
         guid: Option<u128>,
-    ) -> Result<CreateData, crate::WireGuardError> {
+    ) -> Result<Self, crate::WireGuardError> {
         let pool_utf16 = encode_pool_name(pool)?;
         let name_utf16 = encode_adapter_name(name)?;
 
@@ -168,8 +140,6 @@ impl Adapter {
         //the byte order of the segments of the GUID struct that are larger than a byte. Verify
         //that this works as expected
 
-        let mut reboot_required = 0;
-
         crate::log::set_default_logger_if_unset(wireguard);
 
         //SAFETY: the function is loaded from the wireguard dll properly, we are providing valid
@@ -180,20 +150,15 @@ impl Adapter {
                 pool_utf16.as_ptr(),
                 name_utf16.as_ptr(),
                 &guid_struct as *const wireguard_nt_raw::GUID,
-                &mut reboot_required as *mut i32,
             )
         };
 
         if result.is_null() {
             Err("Failed to crate adapter".into())
         } else {
-            Ok(CreateData {
-                adapter: Adapter {
-                    adapter: UnsafeHandle(result),
-                    wireguard: wireguard.clone(),
-                    allowed_ips: Vec::new(),
-                },
-                reboot_required: reboot_required != 0,
+            Ok(Self {
+                adapter: UnsafeHandle(result),
+                wireguard: wireguard.clone(),
             })
         }
     }
@@ -201,18 +166,13 @@ impl Adapter {
     /// Attempts to open an existing wireguard interface inside `pool` with name `name`.
     pub fn open(
         wireguard: &Arc<wireguard_nt_raw::wireguard>,
-        pool: &str,
         name: &str,
     ) -> Result<Adapter, crate::WireGuardError> {
-        let _ = encode_pool_name(pool)?;
-
-        let pool_utf16 = encode_pool_name(pool)?;
         let name_utf16 = encode_adapter_name(name)?;
 
         crate::log::set_default_logger_if_unset(wireguard);
 
-        let result =
-            unsafe { wireguard.WireGuardOpenAdapter(pool_utf16.as_ptr(), name_utf16.as_ptr()) };
+        let result = unsafe { wireguard.WireGuardOpenAdapter(name_utf16.as_ptr()) };
 
         if result.is_null() {
             Err("WireGuardOpenAdapter failed".into())
@@ -220,51 +180,9 @@ impl Adapter {
             Ok(Adapter {
                 adapter: UnsafeHandle(result),
                 wireguard: wireguard.clone(),
-                allowed_ips: Vec::new(),
             })
         }
-    }
-
-    /// Returns a vector of the WireGuard adapters that exist in a particular pool
-    pub fn list_all(
-        wireguard: &Arc<wireguard_nt_raw::wireguard>,
-        pool: &str,
-    ) -> Result<Vec<EnumeratedAdapter>, crate::WireGuardError> {
-        let pool_utf16 = encode_pool_name(pool)?;
-        let mut result = Vec::new();
-
-        //Maybe oneday this will be part of the language, or a proc macro
-        struct CallbackData<'a> {
-            vec: &'a mut Vec<EnumeratedAdapter>,
-            wireguard: &'a Arc<wireguard_nt_raw::wireguard>,
-        }
-
-        extern "C" fn enumerate_one(
-            adapter: wireguard_nt_raw::WIREGUARD_ADAPTER_HANDLE,
-            param: wireguard_nt_raw::LPARAM,
-        ) -> wireguard_nt_raw::BOOL {
-            let data = unsafe { (param as *mut CallbackData).as_mut() }.unwrap();
-            //Push adapter information when the callback is called
-            data.vec.push(EnumeratedAdapter {
-                name: get_adapter_name(data.wireguard, adapter),
-            });
-            1
-        }
-        let mut data = CallbackData {
-            vec: &mut result,
-            wireguard,
-        };
-
-        unsafe {
-            wireguard.WireGuardEnumAdapters(
-                pool_utf16.as_ptr(),
-                Some(enumerate_one),
-                (&mut data as *mut CallbackData) as wireguard_nt_raw::LPARAM,
-            )
-        };
-
-        Ok(result)
-    }
+    } 
 
     /// Sets the wireguard configuration of this adapter
     pub fn set_config(&mut self, config: SetInterface) -> Result<(), WireGuardError> {
@@ -330,9 +248,8 @@ impl Adapter {
 
             flags.bits
         };
-        interface.PeersCount = config.peers.len() as u32;
+        interface.PeersCount = config.peers.len() as u64;
 
-        self.allowed_ips.clear();
         for peer in &config.peers {
             // Safety:
             // `align_of::<WIREGUARD_INTERFACE` is 8, WIREGUARD_PEER has no special alignment
@@ -374,10 +291,9 @@ impl Adapter {
                 }
             }
 
-            wg_peer.AllowedIPsCount = peer.allowed_ips.len() as u32;
+            wg_peer.AllowedIPsCount = peer.allowed_ips.len() as u64;
 
             for allowed_ip in &peer.allowed_ips {
-                self.allowed_ips.push(*allowed_ip);
                 // Safety:
                 // Same as above, `writer` is aligned because it was aligned before
                 let mut wg_allowed_ip: &mut WIREGUARD_ALLOWED_IP = unsafe { writer.write() };
@@ -399,13 +315,13 @@ impl Adapter {
         }
 
         //Make sure that our allocation math was correct and that we filled all of writer
-        assert!(writer.is_full());
+        debug_assert!(writer.is_full());
 
         let result = unsafe {
             self.wireguard.WireGuardSetConfiguration(
                 self.adapter.0,
                 writer.ptr().cast(),
-                size as u32,
+                size as u64,
             )
         };
 
@@ -550,41 +466,13 @@ impl Adapter {
                 != 0
         }
     }
-
-    /// Delete an adapter, consuming it in the process
-    ///
-    /// On success a boolean is returned that indicates weather or not SetupAPI suggests a reboot
-    ///
-    /// Otherwise Err(()) is returned
-    // Return type is clear enough
-    #[allow(clippy::result_unit_err)]
-    pub fn delete(self) -> Result<RebootRequired, ()> {
-        let mut reboot_required = 0;
-
-        let result = unsafe {
-            self.wireguard
-                .WireGuardDeleteAdapter(self.adapter.0, &mut reboot_required as *mut i32)
-        };
-
-        if result != 0 {
-            Ok(reboot_required != 0)
-        } else {
-            Err(())
-        }
-    }
-
-    /// Returns the name of this adapter. Set by calls to [`Adapter::create`]
-    pub fn get_adapter_name(&self) -> String {
-        // TODO: also expose WireGuardSetAdapterName
-        get_adapter_name(&self.wireguard, self.adapter.0)
-    }
 }
 
 impl Drop for Adapter {
     fn drop(&mut self) {
         //Free adapter on drop
-        //This is why we need an Arc of wireguard
-        unsafe { self.wireguard.WireGuardFreeAdapter(self.adapter.0) };
+        //This is why we need an Arc of wireguard, so we have access to it here
+        unsafe { self.wireguard.WireGuardCloseAdapter(self.adapter.0) };
         self.adapter = UnsafeHandle(ptr::null_mut());
     }
 }
