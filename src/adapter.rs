@@ -26,6 +26,7 @@ use widestring::U16CString;
 pub struct Adapter {
     adapter: UnsafeHandle<wireguard_nt_raw::WIREGUARD_ADAPTER_HANDLE>,
     wireguard: Arc<wireguard_nt_raw::wireguard>,
+    allowed_ips: Vec<IpNet>,
 }
 
 /// Holds the newly created adapter and reboot suggestion from the system when a new adapter is
@@ -190,6 +191,7 @@ impl Adapter {
                 adapter: Adapter {
                     adapter: UnsafeHandle(result),
                     wireguard: wireguard.clone(),
+                    allowed_ips: Vec::new(),
                 },
                 reboot_required: reboot_required != 0,
             })
@@ -218,6 +220,7 @@ impl Adapter {
             Ok(Adapter {
                 adapter: UnsafeHandle(result),
                 wireguard: wireguard.clone(),
+                allowed_ips: Vec::new(),
             })
         }
     }
@@ -264,7 +267,7 @@ impl Adapter {
     }
 
     /// Sets the wireguard configuration of this adapter
-    pub fn set_config(&self, config: SetInterface) -> Result<(), WireGuardError> {
+    pub fn set_config(&mut self, config: SetInterface) -> Result<(), WireGuardError> {
         use std::mem::{align_of, size_of};
         use wireguard_nt_raw::*;
 
@@ -329,6 +332,7 @@ impl Adapter {
         };
         interface.PeersCount = config.peers.len() as u32;
 
+        self.allowed_ips.clear();
         for peer in &config.peers {
             // Safety:
             // `align_of::<WIREGUARD_INTERFACE` is 8, WIREGUARD_PEER has no special alignment
@@ -373,6 +377,7 @@ impl Adapter {
             wg_peer.AllowedIPsCount = peer.allowed_ips.len() as u32;
 
             for allowed_ip in &peer.allowed_ips {
+                self.allowed_ips.push(*allowed_ip);
                 // Safety:
                 // Same as above, `writer` is aligned because it was aligned before
                 let mut wg_allowed_ip: &mut WIREGUARD_ALLOWED_IP = unsafe { writer.write() };
@@ -422,21 +427,45 @@ impl Adapter {
                 InitializeUnicastIpAddressEntry, MIB_UNICASTIPADDRESS_ROW,
             };
             use winapi::shared::nldef::IpDadStatePreferred;
-            use winapi::shared::ws2def::AF_INET;
-
-            use winapi::shared::netioapi::{InitializeIpForwardEntry, MIB_IPFORWARD_ROW2};
-            let mut default_route: MIB_IPFORWARD_ROW2 = std::mem::zeroed();
-            InitializeIpForwardEntry(&mut default_route);
-            default_route.InterfaceLuid = std::mem::transmute(luid);
-            *default_route.DestinationPrefix.Prefix.si_family_mut() = AF_INET as u16;
-            *default_route.NextHop.si_family_mut() = AF_INET as u16;
-            default_route.Metric = 0;
 
             use winapi::shared::netioapi::{CreateIpForwardEntry2, CreateUnicastIpAddressEntry};
             use winapi::shared::winerror::{ERROR_OBJECT_ALREADY_EXISTS, ERROR_SUCCESS};
-            let err = CreateIpForwardEntry2(&default_route);
-            if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
-                return win_error("Failed to set default route", err);
+            use winapi::shared::ws2def::{AF_INET, AF_INET6};
+            for allowed_ip in &self.allowed_ips {
+                println!("Adding allowed ip: {}", allowed_ip);
+                use winapi::shared::netioapi::{InitializeIpForwardEntry, MIB_IPFORWARD_ROW2};
+                let mut default_route: MIB_IPFORWARD_ROW2 = std::mem::zeroed();
+                InitializeIpForwardEntry(&mut default_route);
+                default_route.InterfaceLuid = std::mem::transmute(luid);
+                match *allowed_ip {
+                    IpNet::V4(v4) => {
+                        *default_route.DestinationPrefix.Prefix.si_family_mut() = AF_INET as u16;
+                        default_route.DestinationPrefix.Prefix.Ipv4_mut().sin_addr =
+                            std::mem::transmute(v4.addr().octets());
+
+                        default_route.DestinationPrefix.PrefixLength = v4.prefix_len();
+
+                        //Next hop is 0.0.0.0/0, because it is the address of a local interface
+                        //(the wireguard interface). So because the struct is zeroed we don't need
+                        //to set anything except the address family
+                        *default_route.NextHop.si_family_mut() = AF_INET as u16;
+                    }
+                    IpNet::V6(v6) => {
+                        *default_route.DestinationPrefix.Prefix.si_family_mut() = AF_INET6 as u16;
+                        default_route.DestinationPrefix.Prefix.Ipv6_mut().sin6_addr =
+                            std::mem::transmute(v6.addr().octets());
+
+                        default_route.DestinationPrefix.PrefixLength = v6.prefix_len();
+
+                        *default_route.NextHop.si_family_mut() = AF_INET6 as u16;
+                    }
+                }
+                default_route.Metric = 5;
+
+                let err = CreateIpForwardEntry2(&default_route);
+                if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
+                    return win_error("Failed to set default route", err);
+                }
             }
 
             let mut address_row: MIB_UNICASTIPADDRESS_ROW = std::mem::zeroed();
