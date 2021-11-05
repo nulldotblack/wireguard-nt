@@ -56,7 +56,7 @@ fn main() {
             keep_alive: Some(21),
             //Uncomment to tunnel all traffic
             //allowed_ips: vec!["0.0.0.0/0".parse().unwrap()],
-            allowed_ips: vec![allowed_ip],//Only tunnel traffic bound for the demo server the wireguard interface
+            allowed_ips: vec![allowed_ip], //Only tunnel traffic bound for the demo server the wireguard interface
             endpoint,
         }],
     };

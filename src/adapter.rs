@@ -180,10 +180,10 @@ impl Adapter {
                 wireguard: wireguard.clone(),
             })
         }
-    } 
+    }
 
     /// Sets the wireguard configuration of this adapter
-    pub fn set_config(&mut self, config: &SetInterface) -> Result<(), WireGuardError> {
+    pub fn set_config(&self, config: &SetInterface) -> Result<(), WireGuardError> {
         use std::mem::{align_of, size_of};
         use wireguard_nt_raw::*;
 
@@ -334,7 +334,7 @@ impl Adapter {
     pub fn set_default_route(
         &self,
         interface_addr: Ipv4Net,
-        config: &SetInterface
+        config: &SetInterface,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let luid = self.get_luid();
         unsafe {

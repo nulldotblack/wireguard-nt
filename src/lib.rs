@@ -25,18 +25,45 @@
 //! //Unsafe because we are loading an arbitrary dll file
 //! let wireguard = unsafe { wireguard_nt::load_from_path("path/to/wireguard.dll") }.expect("Failed to load wireguard dll");
 //! //Try to open an adapter from the given pool with the name "Demo"
-//! let adapter = match wireguard_nt::Adapter::open(&wireguard, "WireGuard", "Demo") {
+//! let adapter = match wireguard_nt::Adapter::open(&wireguard, "Demo") {
 //!     Ok(a) => a,
 //!     Err(_) =>
 //!         //If loading failed (most likely it didn't exist), create a new one
-//!         wireguard_nt::Adapter::create(&wireguard, "WireGuard", "Demo", None).expect("Failed to create wireguard adapter!").adapter,
+//!         wireguard_nt::Adapter::create(&wireguard, "WireGuard", "Demo", None).expect("Failed to create wireguard adapter!"),
 //! };
 //!
-//! todo!("Set config");
-//! //Delete the adapter when finished.
-//! adapter.delete().unwrap();
+//! let interface = wireguard_nt::SetInterface {
+//!     listen_port: None,
+//!     public_key: None,
+//!     //Fill in private key so we can talk with peers
+//!     private_key: None,
+//!     //Add a peer
+//!     peers: vec![wireguard_nt::SetPeer {
+//!         public_key: None,
+//!         //Disable additional AES encryption
+//!         preshared_key: None,
+//!         //Send a keepalive packet every 21 seconds
+//!         keep_alive: Some(21),
+//!         //Route all traffic through the interface
+//!         allowed_ips: vec!["0.0.0.0/0".parse().unwrap()],
+//!         //The peer's ip address
+//!         endpoint: "1.2.3.4".parse().unwrap(),
+//!     }],
+//! };
+//!
+//! //Set the config our adapter will use
+//! //This lets it know about peers
+//! adapter.set_config(&interface).unwrap();
+//! let internal_ip = "10.4.0.2".parse().unwrap();
+//!
+//! let prefix_length = 24;
+//! let internal_ipnet = ipnet::Ipv4Net::new(internal_ip, prefix_length).unwrap();
+//! //Set up the routing table with the allowed ips for our peers,
+//! //and assign an ip to the interface
+//! adapter.set_default_route(internal_ipnet, &interface).unwrap();
+//!
 //! //drop(adapter)
-//! //And the adapter closes its resources when dropped
+//! //The adapter closes its resources when dropped
 //!    
 //! ```
 //!    
