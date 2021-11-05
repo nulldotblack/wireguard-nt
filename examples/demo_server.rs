@@ -1,10 +1,10 @@
 use std::{
     io::{Read, Write},
-    net::{Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Duration,
 };
 
-use ipnet::Ipv4Net;
+use ipnet::{Ipv4Net, Ipv6Net};
 use log::*;
 
 fn main() {
@@ -15,21 +15,24 @@ fn main() {
 
     let (demo_pub, internal_ip, endpoint) =
         get_demo_server_config(public.as_bytes()).expect("Failed to get demo server credentials");
+    println!("Connecting to {} - internal ip: {}", endpoint, internal_ip);
+
     //Must be run as Administrator because we create network adapters
     //Load the wireguard dll file so that we can call the underlying C functions
     //Unsafe because we are loading an arbitrary dll file
     let wireguard =
         unsafe { wireguard_nt::load_from_path("examples/wireguard_nt/bin/amd64/wireguard.dll") }
             .expect("Failed to load wireguard dll");
+
     //Try to open an adapter from the given pool with the name "Demo"
-    let adapter = match wireguard_nt::Adapter::open(&wireguard, "WireGuard", "Demo") {
+    let adapter = match wireguard_nt::Adapter::open(wireguard, "Demo") {
         Ok(a) => a,
-        Err(_) =>
+        Err((_, wireguard)) =>
         //If loading failed (most likely it didn't exist), create a new one
         {
-            wireguard_nt::Adapter::create(&wireguard, "WireGuard", "Demo", None)
+            wireguard_nt::Adapter::create(wireguard, "WireGuard", "Demo", None)
+                .map_err(|e| e.0)
                 .expect("Failed to create wireguard adapter!")
-                .adapter
         }
     };
     let mut interface_private = [0; 32];
@@ -37,6 +40,12 @@ fn main() {
 
     interface_private.copy_from_slice(private.as_bytes());
     peer_pub.copy_from_slice(demo_pub.as_slice());
+
+    //Only allow traffic going to the demo server to pass through the wireguard interface
+    let allowed_ip = match endpoint.ip() {
+        IpAddr::V4(v4) => Ipv4Net::new(v4, 32).unwrap().into(),
+        IpAddr::V6(v6) => Ipv6Net::new(v6, 128).unwrap().into(),
+    };
 
     let interface = wireguard_nt::SetInterface {
         listen_port: None,
@@ -46,26 +55,25 @@ fn main() {
             public_key: Some(peer_pub),
             preshared_key: None,
             keep_alive: Some(21),
-            allowed_ips: vec!["0.0.0.0/0".parse().unwrap()],
+            //Uncomment to tunnel all traffic
+            //allowed_ips: vec!["0.0.0.0/0".parse().unwrap()],
+            allowed_ips: vec![allowed_ip], //Only tunnel traffic bound for the demo server the wireguard interface
             endpoint,
         }],
     };
     assert!(adapter.set_logging(wireguard_nt::AdapterLoggingLevel::OnWithPrefix));
 
-    match adapter.set_default_route(Ipv4Net::new(internal_ip, 24).unwrap()) {
+    adapter.set_config(&interface).unwrap();
+    match adapter.set_default_route(Ipv4Net::new(internal_ip, 24).unwrap(), &interface) {
         Ok(()) => {}
         Err(err) => panic!("Failed to set default route: {}", err),
     }
-    adapter.set_config(interface).unwrap();
     assert!(adapter.up());
 
     println!("Press enter to exit");
     let mut _buf = [0u8; 32];
     let _ = std::io::stdin().read(&mut _buf);
     println!("Exiting!");
-
-    //Delete the adapter when finished.
-    adapter.delete().unwrap();
 }
 
 /// Gets info from the demo server that can be used to connect.

@@ -9,7 +9,6 @@ use crate::util::UnsafeHandle;
 use crate::wireguard_nt_raw;
 use crate::WireGuardError;
 
-use std::mem::MaybeUninit;
 use std::net::SocketAddr;
 use std::ptr;
 use std::sync::Arc;
@@ -17,7 +16,6 @@ use std::sync::Arc;
 use ipnet::IpNet;
 use ipnet::Ipv4Net;
 use rand::Rng;
-use widestring::U16CStr;
 use widestring::U16CString;
 
 /// Wrapper around a `WIREGUARD_ADAPTER_HANDLE`
@@ -26,16 +24,6 @@ use widestring::U16CString;
 pub struct Adapter {
     adapter: UnsafeHandle<wireguard_nt_raw::WIREGUARD_ADAPTER_HANDLE>,
     wireguard: Arc<wireguard_nt_raw::wireguard>,
-}
-
-/// Holds the newly created adapter and reboot suggestion from the system when a new adapter is
-/// created
-pub struct CreateData {
-    /// The adapter that was created
-    pub adapter: Adapter,
-
-    /// True if Setup API hints that a reboot is required
-    pub reboot_required: RebootRequired,
 }
 
 /// Representation of a WireGuard peer when setting the config
@@ -78,49 +66,37 @@ pub struct SetInterface {
     pub peers: Vec<SetPeer>,
 }
 
-fn encode_utf16(string: &str, max_characters: usize) -> Result<U16CString, crate::WireGuardError> {
-    let utf16 = U16CString::from_str(string)?;
-    if utf16.len() >= max_characters {
+fn encode_name(
+    name: &str,
+    wireguard: Arc<wireguard_nt_raw::wireguard>,
+) -> Result<
+    (U16CString, Arc<wireguard_nt_raw::wireguard>),
+    (crate::WireGuardError, Arc<wireguard_nt_raw::wireguard>),
+> {
+    let utf16 = match U16CString::from_str(name) {
+        Ok(u) => u,
+        Err(e) => return Err((e.into(), wireguard)),
+    };
+    let max = crate::MAX_NAME;
+    if utf16.len() >= max {
         //max_characters is the maximum number of characters including the null terminator. And .len() measures the
         //number of characters (excluding the null terminator). Therefore we can hold a string with
-        //max_characters - 1 because the null terminator sits in the last element. However a string
-        //of length max_characters needs max_characters + 1 to store the null terminator the >=
+        //max_characters - 1 because the null terminator sits in the last element. A string
+        //of length max_characters needs max_characters + 1 to store the null terminator so the >=
         //check holds
-        Err(format!(
-            //TODO: Better error handling
-            "Length too large. Size: {}, Max: {}",
-            utf16.len(),
-            max_characters
-        )
-        .into())
+        Err((
+            format!(
+                //TODO: Better error handling
+                "Length too large. Size: {}, Max: {}",
+                utf16.len(),
+                max,
+            )
+            .into(),
+            wireguard,
+        ))
     } else {
-        Ok(utf16)
+        Ok((utf16, wireguard))
     }
-}
-
-fn encode_pool_name(name: &str) -> Result<U16CString, crate::WireGuardError> {
-    encode_utf16(name, crate::MAX_POOL)
-}
-
-fn encode_adapter_name(name: &str) -> Result<U16CString, crate::WireGuardError> {
-    encode_utf16(name, crate::MAX_POOL)
-}
-
-fn get_adapter_name(
-    wireguard: &Arc<wireguard_nt_raw::wireguard>,
-    adapter: wireguard_nt_raw::WIREGUARD_ADAPTER_HANDLE,
-) -> String {
-    let mut name = MaybeUninit::<[u16; crate::MAX_POOL as usize]>::uninit();
-
-    //SAFETY: name is a allocated on the stack above therefore it must be valid, non-null and
-    //aligned for u16
-    let first = unsafe { *name.as_mut_ptr() }.as_mut_ptr();
-    //Write default null terminator in case WireGuardGetAdapterName leaves name unchanged
-    unsafe { first.write(0u16) };
-    unsafe { wireguard.WireGuardGetAdapterName(adapter, first) };
-
-    //SAFETY: first is a valid, non-null, aligned, null terminated pointer
-    unsafe { U16CStr::from_ptr_str(first) }.to_string_lossy()
 }
 
 /// Contains information about a single existing adapter
@@ -144,13 +120,13 @@ impl Adapter {
     ///
     /// Optionally a GUID can be specified that will become the GUID of this adapter once created.
     pub fn create(
-        wireguard: &Arc<wireguard_nt_raw::wireguard>,
+        wireguard: Arc<wireguard_nt_raw::wireguard>,
         pool: &str,
         name: &str,
         guid: Option<u128>,
-    ) -> Result<CreateData, crate::WireGuardError> {
-        let pool_utf16 = encode_pool_name(pool)?;
-        let name_utf16 = encode_adapter_name(name)?;
+    ) -> Result<Adapter, (crate::WireGuardError, Arc<wireguard_nt_raw::wireguard>)> {
+        let (pool_utf16, wireguard) = encode_name(pool, wireguard)?;
+        let (name_utf16, wireguard) = encode_name(name, wireguard)?;
 
         let guid = match guid {
             Some(guid) => guid,
@@ -167,9 +143,7 @@ impl Adapter {
         //the byte order of the segments of the GUID struct that are larger than a byte. Verify
         //that this works as expected
 
-        let mut reboot_required = 0;
-
-        crate::log::set_default_logger_if_unset(wireguard);
+        crate::log::set_default_logger_if_unset(&wireguard);
 
         //SAFETY: the function is loaded from the wireguard dll properly, we are providing valid
         //pointers, and all the strings are correct null terminated UTF-16. This safety rationale
@@ -179,92 +153,42 @@ impl Adapter {
                 pool_utf16.as_ptr(),
                 name_utf16.as_ptr(),
                 &guid_struct as *const wireguard_nt_raw::GUID,
-                &mut reboot_required as *mut i32,
             )
         };
 
         if result.is_null() {
-            Err("Failed to crate adapter".into())
+            Err(("Failed to crate adapter".into(), wireguard))
         } else {
-            Ok(CreateData {
-                adapter: Adapter {
-                    adapter: UnsafeHandle(result),
-                    wireguard: wireguard.clone(),
-                },
-                reboot_required: reboot_required != 0,
+            Ok(Self {
+                adapter: UnsafeHandle(result),
+                wireguard,
             })
         }
     }
 
     /// Attempts to open an existing wireguard interface inside `pool` with name `name`.
     pub fn open(
-        wireguard: &Arc<wireguard_nt_raw::wireguard>,
-        pool: &str,
+        wireguard: Arc<wireguard_nt_raw::wireguard>,
         name: &str,
-    ) -> Result<Adapter, crate::WireGuardError> {
-        let _ = encode_pool_name(pool)?;
+    ) -> Result<Adapter, (crate::WireGuardError, Arc<wireguard_nt_raw::wireguard>)> {
+        let (name_utf16, wireguard) = encode_name(name, wireguard)?;
 
-        let pool_utf16 = encode_pool_name(pool)?;
-        let name_utf16 = encode_adapter_name(name)?;
+        crate::log::set_default_logger_if_unset(&wireguard);
 
-        crate::log::set_default_logger_if_unset(wireguard);
-
-        let result =
-            unsafe { wireguard.WireGuardOpenAdapter(pool_utf16.as_ptr(), name_utf16.as_ptr()) };
+        let result = unsafe { wireguard.WireGuardOpenAdapter(name_utf16.as_ptr()) };
 
         if result.is_null() {
-            Err("WireGuardOpenAdapter failed".into())
+            Err(("WireGuardOpenAdapter failed".into(), wireguard))
         } else {
             Ok(Adapter {
                 adapter: UnsafeHandle(result),
-                wireguard: wireguard.clone(),
+                wireguard,
             })
         }
     }
 
-    /// Returns a vector of the WireGuard adapters that exist in a particular pool
-    pub fn list_all(
-        wireguard: &Arc<wireguard_nt_raw::wireguard>,
-        pool: &str,
-    ) -> Result<Vec<EnumeratedAdapter>, crate::WireGuardError> {
-        let pool_utf16 = encode_pool_name(pool)?;
-        let mut result = Vec::new();
-
-        //Maybe oneday this will be part of the language, or a proc macro
-        struct CallbackData<'a> {
-            vec: &'a mut Vec<EnumeratedAdapter>,
-            wireguard: &'a Arc<wireguard_nt_raw::wireguard>,
-        }
-
-        extern "C" fn enumerate_one(
-            adapter: wireguard_nt_raw::WIREGUARD_ADAPTER_HANDLE,
-            param: wireguard_nt_raw::LPARAM,
-        ) -> wireguard_nt_raw::BOOL {
-            let data = unsafe { (param as *mut CallbackData).as_mut() }.unwrap();
-            //Push adapter information when the callback is called
-            data.vec.push(EnumeratedAdapter {
-                name: get_adapter_name(data.wireguard, adapter),
-            });
-            1
-        }
-        let mut data = CallbackData {
-            vec: &mut result,
-            wireguard,
-        };
-
-        unsafe {
-            wireguard.WireGuardEnumAdapters(
-                pool_utf16.as_ptr(),
-                Some(enumerate_one),
-                (&mut data as *mut CallbackData) as wireguard_nt_raw::LPARAM,
-            )
-        };
-
-        Ok(result)
-    }
-
     /// Sets the wireguard configuration of this adapter
-    pub fn set_config(&self, config: SetInterface) -> Result<(), WireGuardError> {
+    pub fn set_config(&self, config: &SetInterface) -> Result<(), WireGuardError> {
         use std::mem::{align_of, size_of};
         use wireguard_nt_raw::*;
 
@@ -394,7 +318,7 @@ impl Adapter {
         }
 
         //Make sure that our allocation math was correct and that we filled all of writer
-        assert!(writer.is_full());
+        debug_assert!(writer.is_full());
 
         let result = unsafe {
             self.wireguard.WireGuardSetConfiguration(
@@ -415,6 +339,7 @@ impl Adapter {
     pub fn set_default_route(
         &self,
         interface_addr: Ipv4Net,
+        config: &SetInterface,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let luid = self.get_luid();
         unsafe {
@@ -422,21 +347,46 @@ impl Adapter {
                 InitializeUnicastIpAddressEntry, MIB_UNICASTIPADDRESS_ROW,
             };
             use winapi::shared::nldef::IpDadStatePreferred;
-            use winapi::shared::ws2def::AF_INET;
-
-            use winapi::shared::netioapi::{InitializeIpForwardEntry, MIB_IPFORWARD_ROW2};
-            let mut default_route: MIB_IPFORWARD_ROW2 = std::mem::zeroed();
-            InitializeIpForwardEntry(&mut default_route);
-            default_route.InterfaceLuid = std::mem::transmute(luid);
-            *default_route.DestinationPrefix.Prefix.si_family_mut() = AF_INET as u16;
-            *default_route.NextHop.si_family_mut() = AF_INET as u16;
-            default_route.Metric = 0;
 
             use winapi::shared::netioapi::{CreateIpForwardEntry2, CreateUnicastIpAddressEntry};
             use winapi::shared::winerror::{ERROR_OBJECT_ALREADY_EXISTS, ERROR_SUCCESS};
-            let err = CreateIpForwardEntry2(&default_route);
-            if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
-                return win_error("Failed to set default route", err);
+            use winapi::shared::ws2def::{AF_INET, AF_INET6};
+
+            for allowed_ip in config.peers.iter().map(|p| p.allowed_ips.iter()).flatten() {
+                println!("Adding allowed ip: {}", allowed_ip);
+                use winapi::shared::netioapi::{InitializeIpForwardEntry, MIB_IPFORWARD_ROW2};
+                let mut default_route: MIB_IPFORWARD_ROW2 = std::mem::zeroed();
+                InitializeIpForwardEntry(&mut default_route);
+                default_route.InterfaceLuid = std::mem::transmute(luid);
+                match *allowed_ip {
+                    IpNet::V4(v4) => {
+                        *default_route.DestinationPrefix.Prefix.si_family_mut() = AF_INET as u16;
+                        default_route.DestinationPrefix.Prefix.Ipv4_mut().sin_addr =
+                            std::mem::transmute(v4.addr().octets());
+
+                        default_route.DestinationPrefix.PrefixLength = v4.prefix_len();
+
+                        //Next hop is 0.0.0.0/0, because it is the address of a local interface
+                        //(the wireguard interface). So because the struct is zeroed we don't need
+                        //to set anything except the address family
+                        *default_route.NextHop.si_family_mut() = AF_INET as u16;
+                    }
+                    IpNet::V6(v6) => {
+                        *default_route.DestinationPrefix.Prefix.si_family_mut() = AF_INET6 as u16;
+                        default_route.DestinationPrefix.Prefix.Ipv6_mut().sin6_addr =
+                            std::mem::transmute(v6.addr().octets());
+
+                        default_route.DestinationPrefix.PrefixLength = v6.prefix_len();
+
+                        *default_route.NextHop.si_family_mut() = AF_INET6 as u16;
+                    }
+                }
+                default_route.Metric = 5;
+
+                let err = CreateIpForwardEntry2(&default_route);
+                if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
+                    return win_error("Failed to set default route", err);
+                }
             }
 
             let mut address_row: MIB_UNICASTIPADDRESS_ROW = std::mem::zeroed();
@@ -521,41 +471,13 @@ impl Adapter {
                 != 0
         }
     }
-
-    /// Delete an adapter, consuming it in the process
-    ///
-    /// On success a boolean is returned that indicates weather or not SetupAPI suggests a reboot
-    ///
-    /// Otherwise Err(()) is returned
-    // Return type is clear enough
-    #[allow(clippy::result_unit_err)]
-    pub fn delete(self) -> Result<RebootRequired, ()> {
-        let mut reboot_required = 0;
-
-        let result = unsafe {
-            self.wireguard
-                .WireGuardDeleteAdapter(self.adapter.0, &mut reboot_required as *mut i32)
-        };
-
-        if result != 0 {
-            Ok(reboot_required != 0)
-        } else {
-            Err(())
-        }
-    }
-
-    /// Returns the name of this adapter. Set by calls to [`Adapter::create`]
-    pub fn get_adapter_name(&self) -> String {
-        // TODO: also expose WireGuardSetAdapterName
-        get_adapter_name(&self.wireguard, self.adapter.0)
-    }
 }
 
 impl Drop for Adapter {
     fn drop(&mut self) {
         //Free adapter on drop
-        //This is why we need an Arc of wireguard
-        unsafe { self.wireguard.WireGuardFreeAdapter(self.adapter.0) };
+        //This is why we need an Arc of wireguard, so we have access to it here
+        unsafe { self.wireguard.WireGuardCloseAdapter(self.adapter.0) };
         self.adapter = UnsafeHandle(ptr::null_mut());
     }
 }
