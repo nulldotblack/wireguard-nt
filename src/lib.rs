@@ -75,6 +75,10 @@
 //!    
 //! See `examples/demo_server.rs` that connects to the wireguard demo server
 //!
+//! # Version compatibility
+//! Wireguard NT versions 0.10 and above are supported. Versions < 0.10 have breaking changes that
+//! make interoperability hard. Please file an issue if this effects your use case. 
+//!
 
 mod adapter;
 mod log;
