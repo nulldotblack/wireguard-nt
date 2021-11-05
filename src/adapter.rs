@@ -9,7 +9,6 @@ use crate::util::UnsafeHandle;
 use crate::wireguard_nt_raw;
 use crate::WireGuardError;
 
-use std::mem::MaybeUninit;
 use std::net::SocketAddr;
 use std::ptr;
 use std::sync::Arc;
@@ -17,7 +16,6 @@ use std::sync::Arc;
 use ipnet::IpNet;
 use ipnet::Ipv4Net;
 use rand::Rng;
-use widestring::U16CStr;
 use widestring::U16CString;
 
 /// Wrapper around a `WIREGUARD_ADAPTER_HANDLE`
@@ -185,7 +183,7 @@ impl Adapter {
     } 
 
     /// Sets the wireguard configuration of this adapter
-    pub fn set_config(&mut self, config: SetInterface) -> Result<(), WireGuardError> {
+    pub fn set_config(&mut self, config: &SetInterface) -> Result<(), WireGuardError> {
         use std::mem::{align_of, size_of};
         use wireguard_nt_raw::*;
 
@@ -248,7 +246,7 @@ impl Adapter {
 
             flags.bits
         };
-        interface.PeersCount = config.peers.len() as u64;
+        interface.PeersCount = config.peers.len() as u32;
 
         for peer in &config.peers {
             // Safety:
@@ -291,7 +289,7 @@ impl Adapter {
                 }
             }
 
-            wg_peer.AllowedIPsCount = peer.allowed_ips.len() as u64;
+            wg_peer.AllowedIPsCount = peer.allowed_ips.len() as u32;
 
             for allowed_ip in &peer.allowed_ips {
                 // Safety:
@@ -321,7 +319,7 @@ impl Adapter {
             self.wireguard.WireGuardSetConfiguration(
                 self.adapter.0,
                 writer.ptr().cast(),
-                size as u64,
+                size as u32,
             )
         };
 
@@ -336,6 +334,7 @@ impl Adapter {
     pub fn set_default_route(
         &self,
         interface_addr: Ipv4Net,
+        config: &SetInterface
     ) -> Result<(), Box<dyn std::error::Error>> {
         let luid = self.get_luid();
         unsafe {
@@ -347,7 +346,8 @@ impl Adapter {
             use winapi::shared::netioapi::{CreateIpForwardEntry2, CreateUnicastIpAddressEntry};
             use winapi::shared::winerror::{ERROR_OBJECT_ALREADY_EXISTS, ERROR_SUCCESS};
             use winapi::shared::ws2def::{AF_INET, AF_INET6};
-            for allowed_ip in &self.allowed_ips {
+
+            for allowed_ip in config.peers.iter().map(|p| p.allowed_ips.iter()).flatten() {
                 println!("Adding allowed ip: {}", allowed_ip);
                 use winapi::shared::netioapi::{InitializeIpForwardEntry, MIB_IPFORWARD_ROW2};
                 let mut default_route: MIB_IPFORWARD_ROW2 = std::mem::zeroed();

@@ -14,7 +14,7 @@ unsafe impl<T> Send for UnsafeHandle<T> {}
 unsafe impl<T> Sync for UnsafeHandle<T> {}
 
 /// Returns the major and minor version of the wireguard driver
-pub fn get_running_driver_version(wireguard: &Arc<wireguard_nt_raw::wireguard>) -> u64 {
+pub fn get_running_driver_version(wireguard: &Arc<wireguard_nt_raw::wireguard>) -> u32 {
     unsafe { wireguard.WireGuardGetRunningDriverVersion() }
 }
 

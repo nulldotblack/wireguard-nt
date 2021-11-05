@@ -23,15 +23,15 @@ fn main() {
     let wireguard =
         unsafe { wireguard_nt::load_from_path("examples/wireguard_nt/bin/amd64/wireguard.dll") }
             .expect("Failed to load wireguard dll");
+
     //Try to open an adapter from the given pool with the name "Demo"
-    let mut adapter = match wireguard_nt::Adapter::open(&wireguard, "WireGuard", "Demo") {
+    let mut adapter = match wireguard_nt::Adapter::open(&wireguard, "Demo") {
         Ok(a) => a,
         Err(_) =>
         //If loading failed (most likely it didn't exist), create a new one
         {
             wireguard_nt::Adapter::create(&wireguard, "WireGuard", "Demo", None)
                 .expect("Failed to create wireguard adapter!")
-                .adapter
         }
     };
     let mut interface_private = [0; 32];
@@ -56,14 +56,14 @@ fn main() {
             keep_alive: Some(21),
             //Uncomment to tunnel all traffic
             //allowed_ips: vec!["0.0.0.0/0".parse().unwrap()],
-            allowed_ips: vec![allowed_ip],
+            allowed_ips: vec![allowed_ip],//Only tunnel traffic bound for the demo server the wireguard interface
             endpoint,
         }],
     };
     assert!(adapter.set_logging(wireguard_nt::AdapterLoggingLevel::OnWithPrefix));
 
-    adapter.set_config(interface).unwrap();
-    match adapter.set_default_route(Ipv4Net::new(internal_ip, 24).unwrap()) {
+    adapter.set_config(&interface).unwrap();
+    match adapter.set_default_route(Ipv4Net::new(internal_ip, 24).unwrap(), &interface) {
         Ok(()) => {}
         Err(err) => panic!("Failed to set default route: {}", err),
     }
@@ -73,9 +73,6 @@ fn main() {
     let mut _buf = [0u8; 32];
     let _ = std::io::stdin().read(&mut _buf);
     println!("Exiting!");
-
-    //Delete the adapter when finished.
-    adapter.delete().unwrap();
 }
 
 /// Gets info from the demo server that can be used to connect.
