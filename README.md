@@ -27,11 +27,15 @@ adapter. Start by its config with [`Adapter::set_config`].
 //Unsafe because we are loading an arbitrary dll file
 let wireguard = unsafe { wireguard_nt::load_from_path("path/to/wireguard.dll") }.expect("Failed to load wireguard dll");
 //Try to open an adapter with the name "Demo"
-let adapter = match wireguard_nt::Adapter::open(Arc::clone(wireguard), "Demo") {
+let adapter = match wireguard_nt::Adapter::open(wireguard, "Demo") {
     Ok(a) => a,
-    Err(_) =>
+    Err((_, wireguard)) => {
         //If loading failed (most likely it didn't exist), create a new one
-        wireguard_nt::Adapter::create(wireguard, "WireGuard", "Demo", None).expect("Failed to create wireguard adapter!"),
+        match wireguard_nt::Adapter::create(wireguard, "WireGuard", "Demo", None) {
+            Ok(a) => a,
+            Err((e, _)) => panic!("Failed to create adapter: {:?}", e),
+        }
+    }
 };
 
 let interface = wireguard_nt::SetInterface {
