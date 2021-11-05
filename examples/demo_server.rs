@@ -25,12 +25,13 @@ fn main() {
             .expect("Failed to load wireguard dll");
 
     //Try to open an adapter from the given pool with the name "Demo"
-    let mut adapter = match wireguard_nt::Adapter::open(&wireguard, "Demo") {
+    let adapter = match wireguard_nt::Adapter::open(wireguard, "Demo") {
         Ok(a) => a,
-        Err(_) =>
+        Err((_, wireguard)) =>
         //If loading failed (most likely it didn't exist), create a new one
         {
-            wireguard_nt::Adapter::create(&wireguard, "WireGuard", "Demo", None)
+            wireguard_nt::Adapter::create(wireguard, "WireGuard", "Demo", None)
+                .map_err(|e| e.0)
                 .expect("Failed to create wireguard adapter!")
         }
     };

@@ -66,32 +66,37 @@ pub struct SetInterface {
     pub peers: Vec<SetPeer>,
 }
 
-fn encode_utf16(string: &str, max_characters: usize) -> Result<U16CString, crate::WireGuardError> {
-    let utf16 = U16CString::from_str(string)?;
-    if utf16.len() >= max_characters {
+fn encode_name(
+    name: &str,
+    wireguard: Arc<wireguard_nt_raw::wireguard>,
+) -> Result<
+    (U16CString, Arc<wireguard_nt_raw::wireguard>),
+    (crate::WireGuardError, Arc<wireguard_nt_raw::wireguard>),
+> {
+    let utf16 = match U16CString::from_str(name) {
+        Ok(u) => u,
+        Err(e) => return Err((e.into(), wireguard)),
+    };
+    let max = crate::MAX_NAME;
+    if utf16.len() >= max {
         //max_characters is the maximum number of characters including the null terminator. And .len() measures the
         //number of characters (excluding the null terminator). Therefore we can hold a string with
         //max_characters - 1 because the null terminator sits in the last element. A string
         //of length max_characters needs max_characters + 1 to store the null terminator so the >=
         //check holds
-        Err(format!(
-            //TODO: Better error handling
-            "Length too large. Size: {}, Max: {}",
-            utf16.len(),
-            max_characters
-        )
-        .into())
+        Err((
+            format!(
+                //TODO: Better error handling
+                "Length too large. Size: {}, Max: {}",
+                utf16.len(),
+                max,
+            )
+            .into(),
+            wireguard,
+        ))
     } else {
-        Ok(utf16)
+        Ok((utf16, wireguard))
     }
-}
-
-fn encode_pool_name(name: &str) -> Result<U16CString, crate::WireGuardError> {
-    encode_utf16(name, crate::MAX_POOL)
-}
-
-fn encode_adapter_name(name: &str) -> Result<U16CString, crate::WireGuardError> {
-    encode_utf16(name, crate::MAX_POOL)
 }
 
 /// Contains information about a single existing adapter
@@ -115,13 +120,13 @@ impl Adapter {
     ///
     /// Optionally a GUID can be specified that will become the GUID of this adapter once created.
     pub fn create(
-        wireguard: &Arc<wireguard_nt_raw::wireguard>,
+        wireguard: Arc<wireguard_nt_raw::wireguard>,
         pool: &str,
         name: &str,
         guid: Option<u128>,
-    ) -> Result<Self, crate::WireGuardError> {
-        let pool_utf16 = encode_pool_name(pool)?;
-        let name_utf16 = encode_adapter_name(name)?;
+    ) -> Result<Adapter, (crate::WireGuardError, Arc<wireguard_nt_raw::wireguard>)> {
+        let (pool_utf16, wireguard) = encode_name(pool, wireguard)?;
+        let (name_utf16, wireguard) = encode_name(name, wireguard)?;
 
         let guid = match guid {
             Some(guid) => guid,
@@ -138,7 +143,7 @@ impl Adapter {
         //the byte order of the segments of the GUID struct that are larger than a byte. Verify
         //that this works as expected
 
-        crate::log::set_default_logger_if_unset(wireguard);
+        crate::log::set_default_logger_if_unset(&wireguard);
 
         //SAFETY: the function is loaded from the wireguard dll properly, we are providing valid
         //pointers, and all the strings are correct null terminated UTF-16. This safety rationale
@@ -152,32 +157,32 @@ impl Adapter {
         };
 
         if result.is_null() {
-            Err("Failed to crate adapter".into())
+            Err(("Failed to crate adapter".into(), wireguard))
         } else {
             Ok(Self {
                 adapter: UnsafeHandle(result),
-                wireguard: wireguard.clone(),
+                wireguard,
             })
         }
     }
 
     /// Attempts to open an existing wireguard interface inside `pool` with name `name`.
     pub fn open(
-        wireguard: &Arc<wireguard_nt_raw::wireguard>,
+        wireguard: Arc<wireguard_nt_raw::wireguard>,
         name: &str,
-    ) -> Result<Adapter, crate::WireGuardError> {
-        let name_utf16 = encode_adapter_name(name)?;
+    ) -> Result<Adapter, (crate::WireGuardError, Arc<wireguard_nt_raw::wireguard>)> {
+        let (name_utf16, wireguard) = encode_name(name, wireguard)?;
 
-        crate::log::set_default_logger_if_unset(wireguard);
+        crate::log::set_default_logger_if_unset(&wireguard);
 
         let result = unsafe { wireguard.WireGuardOpenAdapter(name_utf16.as_ptr()) };
 
         if result.is_null() {
-            Err("WireGuardOpenAdapter failed".into())
+            Err(("WireGuardOpenAdapter failed".into(), wireguard))
         } else {
             Ok(Adapter {
                 adapter: UnsafeHandle(result),
-                wireguard: wireguard.clone(),
+                wireguard,
             })
         }
     }
