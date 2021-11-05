@@ -9,17 +9,16 @@
 //!
 //! ```toml
 //! [dependencies]
-//! wireguard-nt = "0.1"
+//! wireguard-nt = "0.2"
 //! ```
 //!
 //! Inside your code load the wireguard.dll signed driver file, downloaded from <https://git.zx2c4.com/wireguard-nt/about>
 //!
 //! Then either call [`Adapter::create`] or [`Adapter::open`] to obtain a wireguard
-//! adapter. Start by its config with [`Adapter::set_config`].
+//! adapter. Start by setting its config with [`Adapter::set_config`].
 //!
 //! # Example
 //! ```no_run
-//!
 //! //Must be run as Administrator because we create network adapters
 //! //Load the wireguard dll file so that we can call the underlying C functions
 //! //Unsafe because we are loading an arbitrary dll file

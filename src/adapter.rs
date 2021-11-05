@@ -166,7 +166,7 @@ impl Adapter {
         }
     }
 
-    /// Attempts to open an existing wireguard interface inside `pool` with name `name`.
+    /// Attempts to open an existing wireguard with name `name`.
     pub fn open(
         wireguard: Arc<wireguard_nt_raw::wireguard>,
         name: &str,

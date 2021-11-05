@@ -11,17 +11,16 @@ Add a dependency on this library to your `Cargo.toml`
 
 ```toml
 [dependencies]
-wireguard-nt = "0.1"
+wireguard-nt = "0.2"
 ```
 
 Inside your code load the wireguard.dll signed driver file, downloaded from <https://git.zx2c4.com/wireguard-nt/about>
 
 Then either call [`Adapter::create`] or [`Adapter::open`] to obtain a wireguard
-adapter. Start by its config with [`Adapter::set_config`].
+adapter. Start by setting its config with [`Adapter::set_config`].
 
 ## Example
 ```rust
-
 //Must be run as Administrator because we create network adapters
 //Load the wireguard dll file so that we can call the underlying C functions
 //Unsafe because we are loading an arbitrary dll file
@@ -76,6 +75,10 @@ adapter.set_default_route(internal_ipnet, &interface).unwrap();
 ```
 
 See `examples/demo_server.rs` that connects to the wireguard demo server
+
+## Version compatibility
+Wireguard NT versions 0.10 and above are supported. Versions < 0.10 have breaking changes that
+make interoperability hard. Please file an issue if this effects your use case.
 
 
 License: MIT
