@@ -18,6 +18,8 @@ use ipnet::{IpNet, Ipv6Net};
 use ipnet::Ipv4Net;
 use rand::Rng;
 use widestring::U16CString;
+use winapi::shared::winerror::ERROR_MORE_DATA;
+use winapi::um::errhandlingapi::GetLastError;
 use crate::wireguard_nt_raw::{DWORD, WIREGUARD_ALLOWED_IP, WIREGUARD_INTERFACE, WIREGUARD_PEER};
 
 /// Wrapper around a `WIREGUARD_ADAPTER_HANDLE`
@@ -475,115 +477,114 @@ impl Adapter {
     }
 
     /// Gets the current configuration of this adapter
-    ///
-    /// Pass in the same vector of peers as used in the `set_config()` call
-    pub fn get_config(&self, peers: &Vec<SetPeer>) -> WireguardInterface {
-        unsafe {
-            let total_peers = peers.len();
-            let total_allowed_ips: usize = peers.iter().map(|peer| peer.allowed_ips.len()).sum();
-            let mut size = size_of::<WIREGUARD_INTERFACE>()
-                + size_of::<WIREGUARD_PEER>() * total_peers
-                + size_of::<WIREGUARD_ALLOWED_IP>() * total_allowed_ips;
-            let mut align = align_of::<WIREGUARD_INTERFACE>();
-            let mut reader = StructReader::new(size, align);
-            let res = self.wireguard.WireGuardGetConfiguration(self.adapter.0, std::mem::transmute(reader.ptr()), std::mem::transmute(&mut size));
-            assert_ne!(res, 0); // 0 means we got the size wrong
-            let wireguard_interface: WIREGUARD_INTERFACE = reader.read();
-            let mut wg_interface = WireguardInterface {
-                Flags: wireguard_interface.Flags as u32,
-                ListenPort: wireguard_interface.ListenPort,
-                PrivateKey: wireguard_interface.PrivateKey,
-                PublicKey: wireguard_interface.PublicKey,
-                Peers: Vec::with_capacity(wireguard_interface.PeersCount as usize),
+    pub fn get_config(&self) -> WireguardInterface {
+        // calling wireguard.WireGuardGetConfiguration with Bytes = 0 returns ERROR_MORE_DATA
+        // and updates Bytes to the correct value
+        let mut size = 0u32;
+        let res = unsafe { self.wireguard.WireGuardGetConfiguration(self.adapter.0, 0 as _, &mut size as _) };
+        assert_eq!(res, 0);
+        assert_eq!(unsafe { GetLastError() }, ERROR_MORE_DATA);
+        assert_ne!(size, 0); // size has been updated
+        let mut align = align_of::<WIREGUARD_INTERFACE>();
+        let mut reader = StructReader::new(size as usize, align);
+        let res = unsafe { self.wireguard.WireGuardGetConfiguration(self.adapter.0, reader.ptr() as _,  &mut size as _) };
+        assert_ne!(res, 0);
+        let wireguard_interface: WIREGUARD_INTERFACE = unsafe { reader.read() };
+        let mut wg_interface = WireguardInterface {
+            Flags: wireguard_interface.Flags as u32,
+            ListenPort: wireguard_interface.ListenPort,
+            PrivateKey: wireguard_interface.PrivateKey,
+            PublicKey: wireguard_interface.PublicKey,
+            Peers: Vec::with_capacity(wireguard_interface.PeersCount as usize),
+        };
+        for _ in 0..wireguard_interface.PeersCount {
+            let peer: WIREGUARD_PEER = unsafe { reader.read() };
+            let endpoint = peer.Endpoint;
+            let endpoint = unsafe { match endpoint.si_family as i32 {
+                winapi::shared::ws2def::AF_INET => {
+                    let octets = endpoint.Ipv4.sin_addr.S_un.S_un_b;
+                    let address = Ipv4Addr::new(octets.s_b1, octets.s_b2, octets.s_b3, octets.s_b4);
+                    let port = u16::from_be(endpoint.Ipv4.sin_port);
+                    SocketAddr::V4(SocketAddrV4::new(address, port))
+                }
+                winapi::shared::ws2def::AF_INET6 => {
+                    let octets = endpoint.Ipv6.sin6_addr.u.Byte;
+                    let address = Ipv6Addr::from(octets);
+                    let port = u16::from_be(endpoint.Ipv6.sin6_port);
+                    let flow_info = endpoint.Ipv6.sin6_flowinfo;
+                    let scope_id = endpoint.Ipv6.__bindgen_anon_1.sin6_scope_id;
+                    SocketAddr::V6(SocketAddrV6::new(address, port, flow_info, scope_id))
+                }
+                _ => { panic!("Illegal address family {}", endpoint.si_family); }
+            }};
+            let mut wg_peer = WireguardPeer {
+                Flags: peer.Flags as u32,
+                PublicKey: peer.PublicKey,
+                PresharedKey: peer.PresharedKey,
+                PersistentKeepalive: peer.PersistentKeepalive,
+                Endpoint: endpoint,
+                TxBytes: peer.TxBytes,
+                RxBytes: peer.RxBytes,
+                LastHandshake: peer.LastHandshake,
+                AllowedIps: Vec::with_capacity(peer.AllowedIPsCount as usize),
             };
-            for _ in 1..=wireguard_interface.PeersCount {
-                let peer: WIREGUARD_PEER = reader.read();
-                let endpoint = peer.Endpoint;
-                let endpoint = match endpoint.si_family as i32 {
+            for _ in 0..peer.AllowedIPsCount {
+                let allowed_ip: WIREGUARD_ALLOWED_IP = unsafe { reader.read() };
+                let prefix_length = allowed_ip.Cidr;
+                let allowed_ip = match allowed_ip.AddressFamily as i32 {
                     winapi::shared::ws2def::AF_INET => {
-                        let octets = endpoint.Ipv4.sin_addr.S_un.S_un_b;
+                        let octets = unsafe { allowed_ip.Address.V4.S_un.S_un_b };
                         let address = Ipv4Addr::new(octets.s_b1, octets.s_b2, octets.s_b3, octets.s_b4);
-                        let port = u16::from_be(endpoint.Ipv4.sin_port);
-                        SocketAddr::V4(SocketAddrV4::new(address, port))
+                        IpNet::V4(Ipv4Net::new(address, prefix_length).expect("prefix is valid"))
                     }
                     winapi::shared::ws2def::AF_INET6 => {
-                        let octets = endpoint.Ipv6.sin6_addr.u.Byte;
+                        let octets = unsafe { allowed_ip.Address.V6.u.Byte };
                         let address = Ipv6Addr::from(octets);
-                        let port = u16::from_be(endpoint.Ipv6.sin6_port);
-                        let flow_info = endpoint.Ipv6.sin6_flowinfo;
-                        let scope_id = endpoint.Ipv6.__bindgen_anon_1.sin6_scope_id;
-                        SocketAddr::V6(SocketAddrV6::new(address, port, flow_info, scope_id))
+                        IpNet::V6(Ipv6Net::new(address, prefix_length).expect("prefix is valid"))
                     }
-                    _ => { panic!("Illegal address family {}", endpoint.si_family); }
+                    _ => { panic!("Illegal address family {}", allowed_ip.AddressFamily); }
                 };
-                let mut wg_peer = WireguardPeer {
-                    Flags: peer.Flags as u32,
-                    PublicKey: peer.PublicKey,
-                    PresharedKey: peer.PresharedKey,
-                    PersistentKeepalive: peer.PersistentKeepalive,
-                    Endpoint: endpoint,
-                    TxBytes: peer.TxBytes,
-                    RxBytes: peer.RxBytes,
-                    LastHandshake: peer.LastHandshake,
-                    AllowedIps: Vec::with_capacity(peer.AllowedIPsCount as usize),
-                };
-                for _ in 1..=peer.AllowedIPsCount {
-                    let allowed_ip: WIREGUARD_ALLOWED_IP = reader.read();
-                    let prefix_length = allowed_ip.Cidr;
-                    let allowed_ip = match allowed_ip.AddressFamily as i32 {
-                        winapi::shared::ws2def::AF_INET => {
-                            let octets = allowed_ip.Address.V4.S_un.S_un_b;
-                            let address = Ipv4Addr::new(octets.s_b1, octets.s_b2, octets.s_b3, octets.s_b4);
-                            IpNet::V4(Ipv4Net::new(address, prefix_length).expect("prefix is valid"))
-                        }
-                        winapi::shared::ws2def::AF_INET6 => {
-                            let octets = allowed_ip.Address.V6.u.Byte;
-                            let address = Ipv6Addr::from(octets);
-                            IpNet::V6(Ipv6Net::new(address, prefix_length).expect("prefix is valid"))
-                        }
-                        _ => { panic!("Illegal address family {}", allowed_ip.AddressFamily); }
-                    };
-                    wg_peer.AllowedIps.push(allowed_ip);
-                }
-                wg_interface.Peers.push(wg_peer);
+                wg_peer.AllowedIps.push(allowed_ip);
             }
-            wg_interface
+            wg_interface.Peers.push(wg_peer);
         }
+        wg_interface
     }
 }
 
 #[derive(Debug)]
 pub struct WireguardPeer {
-    #[doc = "< Bitwise combination of flags"]
+    /// Bitwise combination of flags
     pub Flags: u32,
-    #[doc = "< Public key, the peer's primary identifier"]
+    /// Public key, the peer's primary identifier
     pub PublicKey: [u8; 32usize],
-    #[doc = "< Preshared key for additional layer of post-quantum resistance"]
+    /// Preshared key for additional layer of post-quantum resistance
     pub PresharedKey: [u8; 32usize],
-    #[doc = "< Seconds interval, or 0 to disable"]
+    /// Seconds interval, or 0 to disable
     pub PersistentKeepalive: u16,
-    #[doc = "< Endpoint, with IP address and UDP port number"]
+    /// Endpoint, with IP address and UDP port number
     pub Endpoint: SocketAddr,
-    #[doc = "< Number of bytes transmitted"]
+    /// Number of bytes transmitted
     pub TxBytes: u64,
-    #[doc = "< Number of bytes received"]
+    /// Number of bytes received
     pub RxBytes: u64,
-    #[doc = "< Time of the last handshake, in 100ns intervals since 1601-01-01 UTC"]
+    /// Time of the last handshake, in 100ns intervals since 1601-01-01 UTC
     pub LastHandshake: u64,
-    #[doc = "< Number of allowed IP structs following this struct"]
+    /// Number of allowed IP structs following this struct
     pub AllowedIps: Vec<IpNet>,
 }
 
 #[derive(Debug)]
 pub struct WireguardInterface {
+    /// Bitwise combination of flags
     pub Flags: u32,
-    #[doc = "< Port for UDP listen socket, or 0 to choose randomly"]
+    /// Port for UDP listen socket, or 0 to choose randomly
     pub ListenPort: u16,
-    #[doc = "< Private key of interface"]
+    /// Private key of interface
     pub PrivateKey: [u8; 32usize],
-    #[doc = "< Corresponding public key of private key"]
+    /// Corresponding public key of private key
     pub PublicKey: [u8; 32usize],
-    #[doc = "< Number of peer structs following this struct"]
+    /// Number of peer structs following this struct
     pub Peers: Vec<WireguardPeer>,
 }
 
