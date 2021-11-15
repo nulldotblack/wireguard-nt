@@ -1,6 +1,6 @@
 [package]
 name = "wireguard-nt"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2018"
 authors = ["null.black Inc. <opensource@null.black>", "Troy Neubauer <troy@null.black>"]
 repository = "https://github.com/nulldotblack/wireguard-nt"
@@ -23,11 +23,10 @@ bitflags = "1.3"
 
 libloading = "0.7"
 ipnet = "2.3"
-winapi = { version = "0.3", features = ["ws2def"] }
+winapi = { version = "0.3", features = ["ws2def", "netioapi", "nldef"] }
 
 [dev-dependencies]
 env_logger = "0.9"
-winapi = { version = "0.3", features = ["ws2def", "netioapi", "iptypes", "iphlpapi", "nldef"] }
 base64 = "0.13"
 boringtun = "0.3"
 ipnet = "2.3"
