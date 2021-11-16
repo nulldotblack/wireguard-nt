@@ -481,7 +481,7 @@ impl Adapter {
         // calling wireguard.WireGuardGetConfiguration with Bytes = 0 returns ERROR_MORE_DATA
         // and updates Bytes to the correct value
         let mut size = 0u32;
-        let res = unsafe { self.wireguard.WireGuardGetConfiguration(self.adapter.0, 0 as _, &mut size as _) };
+        let res = unsafe { self.wireguard.WireGuardGetConfiguration(self.adapter.0, std::ptr::null_mut(), &mut size as _) };
         assert_eq!(res, 0);
         assert_eq!(unsafe { GetLastError() }, ERROR_MORE_DATA);
         assert_ne!(size, 0); // size has been updated
@@ -489,6 +489,13 @@ impl Adapter {
         let mut reader = StructReader::new(size as usize, align);
         let res = unsafe { self.wireguard.WireGuardGetConfiguration(self.adapter.0, reader.ptr() as _,  &mut size as _) };
         assert_ne!(res, 0);
+
+        // # Safety:
+        // 1. `WireGuardGetConfiguration` writes a `WIREGUARD_INTERFACE` at offset 0 to the buffer we give it.
+        // 2. The buffer's alignment is set to be the proper alignment for a `WIREGUARD_INTERFACE` by the line above
+        // 3. We calculate the size of `reader` with the first call to `WireGuardGetConfiguration`. Wireguard writes at
+        //    least one `WIREGUARD_INTERFACE`, and size is updated accordingly, therefore `reader`'s allocation is at least
+        //    the size of a `WIREGUARD_INTERFACE`
         let wireguard_interface: WIREGUARD_INTERFACE = unsafe { reader.read() };
         let mut wg_interface = WireguardInterface {
             Flags: wireguard_interface.Flags as u32,
@@ -498,25 +505,32 @@ impl Adapter {
             Peers: Vec::with_capacity(wireguard_interface.PeersCount as usize),
         };
         for _ in 0..wireguard_interface.PeersCount {
+            // # Safety:
+            // 1. `WireGuardGetConfiguration` writes a `WIREGUARD_PEER` immediately after the WIREGUARD_INTERFACE we read above.
+            // 2. We rely on Wireguard-NT to specify the number of peers written, and therefore we never read too many times unless Wireguard-NT (wrongly) tells us to
             let peer: WIREGUARD_PEER = unsafe { reader.read() };
             let endpoint = peer.Endpoint;
-            let endpoint = unsafe { match endpoint.si_family as i32 {
+            let address_family = unsafe { endpoint.si_family } as i32;
+            let endpoint = match address_family {
                 winapi::shared::ws2def::AF_INET => {
-                    let octets = endpoint.Ipv4.sin_addr.S_un.S_un_b;
+                    // #Safety
+                    // This enum is valid to access because the address is a [u8; 4] which is set properly by the call above,
+                    // and it can have any value.
+                    let octets = unsafe { endpoint.Ipv4.sin_addr.S_un.S_un_b };
                     let address = Ipv4Addr::new(octets.s_b1, octets.s_b2, octets.s_b3, octets.s_b4);
-                    let port = u16::from_be(endpoint.Ipv4.sin_port);
+                    let port = u16::from_be(unsafe { endpoint.Ipv4.sin_port });
                     SocketAddr::V4(SocketAddrV4::new(address, port))
                 }
                 winapi::shared::ws2def::AF_INET6 => {
-                    let octets = endpoint.Ipv6.sin6_addr.u.Byte;
+                    let octets = unsafe { endpoint.Ipv6.sin6_addr.u.Byte };
                     let address = Ipv6Addr::from(octets);
-                    let port = u16::from_be(endpoint.Ipv6.sin6_port);
-                    let flow_info = endpoint.Ipv6.sin6_flowinfo;
-                    let scope_id = endpoint.Ipv6.__bindgen_anon_1.sin6_scope_id;
+                    let port = u16::from_be(unsafe { endpoint.Ipv6.sin6_port });
+                    let flow_info = unsafe { endpoint.Ipv6.sin6_flowinfo };
+                    let scope_id = unsafe { endpoint.Ipv6.__bindgen_anon_1.sin6_scope_id };
                     SocketAddr::V6(SocketAddrV6::new(address, port, flow_info, scope_id))
                 }
-                _ => { panic!("Illegal address family {}", endpoint.si_family); }
-            }};
+                _ => { panic!("Illegal address family {}", address_family); }
+            };
             let mut wg_peer = WireguardPeer {
                 Flags: peer.Flags as u32,
                 PublicKey: peer.PublicKey,
@@ -529,6 +543,9 @@ impl Adapter {
                 AllowedIps: Vec::with_capacity(peer.AllowedIPsCount as usize),
             };
             for _ in 0..peer.AllowedIPsCount {
+                // # Safety:
+                // 1. `WireGuardGetConfiguration` writes zero or more `WIREGUARD_ALLOWED_IP`s immediately after the WIREGUARD_PEER we read above.
+                // 2. We rely on Wireguard-NT to specify the number of allowed ips written, and therefore we never read too many times unless Wireguard-NT (wrongly) tells us to
                 let allowed_ip: WIREGUARD_ALLOWED_IP = unsafe { reader.read() };
                 let prefix_length = allowed_ip.Cidr;
                 let allowed_ip = match allowed_ip.AddressFamily as i32 {
