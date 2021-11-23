@@ -1,6 +1,6 @@
 [package]
 name = "wireguard-nt"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2018"
 authors = ["null.black Inc. <opensource@null.black>", "Troy Neubauer <troy@null.black>"]
 repository = "https://github.com/nulldotblack/wireguard-nt"
