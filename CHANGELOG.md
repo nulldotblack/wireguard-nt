@@ -15,6 +15,7 @@ support multiple addresses as well as hybrid Ipv6/Ipv4 configuration #7
 ### Breaking Changes
 
 - `set_default_route` Takes a immutable slice of IpNet's instead of a single Ipv4Net #7
+- Names of fields inside adapter::WireguardInterface and adapter::WireguardPeer are changed to be snake case
 
 ## [0.2.2] - 2021-11-14
 
