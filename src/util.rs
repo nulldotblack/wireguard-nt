@@ -158,11 +158,10 @@ impl Drop for StructReader {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::mem::{align_of_val, size_of_val};
     use super::*;
+    use std::mem::{align_of_val, size_of_val};
 
     #[test]
     fn reader_basic() {
@@ -174,9 +173,10 @@ mod tests {
         }
         let expected_data = Data {
             field_a: 0b10000001,
-            field_b: 0x00FFFF00
+            field_b: 0x00FFFF00,
         };
-        let mut reader = StructReader::new(size_of_val(&expected_data), align_of_val(&expected_data));
+        let mut reader =
+            StructReader::new(size_of_val(&expected_data), align_of_val(&expected_data));
         let byte_buffer: &mut [u8; 8] = unsafe { std::mem::transmute(reader.ptr()) };
         byte_buffer[0] = 0b10000001;
         byte_buffer[4] = 0x0;
