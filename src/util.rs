@@ -161,7 +161,7 @@ impl Drop for StructReader {
 
 #[cfg(test)]
 mod tests {
-    use std::mem::{align_of, align_of_val, size_of, size_of_val};
+    use std::mem::{align_of_val, size_of_val};
     use super::*;
 
     #[test]

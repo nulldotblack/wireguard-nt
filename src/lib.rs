@@ -66,7 +66,7 @@
 //! let internal_ipnet = ipnet::Ipv4Net::new(internal_ip, internal_prefix_length).unwrap();
 //! //Set up the routing table with the allowed ips for our peers,
 //! //and assign an ip to the interface
-//! adapter.set_default_route(internal_ipnet, &interface).unwrap();
+//! adapter.set_default_route(&[internal_ipnet.into()], &interface).unwrap();
 //!
 //! //drop(adapter)
 //! //The adapter closes its resources when dropped
