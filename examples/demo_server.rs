@@ -64,7 +64,7 @@ fn main() {
     assert!(adapter.set_logging(wireguard_nt::AdapterLoggingLevel::OnWithPrefix));
 
     adapter.set_config(&interface).unwrap();
-    match adapter.set_default_route(Ipv4Net::new(internal_ip, 24).unwrap(), &interface) {
+    match adapter.set_default_route(&[Ipv4Net::new(internal_ip, 24).unwrap().into()], &interface) {
         Ok(()) => {}
         Err(err) => panic!("Failed to set default route: {}", err),
     }
