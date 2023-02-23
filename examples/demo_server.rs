@@ -64,7 +64,7 @@ fn main() {
         Ok(()) => {}
         Err(err) => panic!("Failed to set default route: {}", err),
     }
-    assert!(adapter.up());
+    assert!(adapter.up().is_ok());
 
     // Go to http://demo.wireguard.com/ and see the bandwidth numbers change!
     println!("Printing peer bandwidth statistics");
