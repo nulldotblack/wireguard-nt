@@ -13,6 +13,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::ptr;
+use std::ffi::c_int;
 use std::sync::Arc;
 
 use crate::wireguard_nt_raw::{WIREGUARD_ALLOWED_IP, WIREGUARD_INTERFACE, WIREGUARD_PEER};
@@ -443,21 +444,45 @@ impl Adapter {
         }
     }
 
+    /// Get the state of this adapter
+    pub fn is_up(&self) -> Result<bool, std::io::Error> {
+        let mut state: c_int = 0;
+        let success = unsafe {
+            self.wireguard
+                .WireGuardGetAdapterState(self.adapter.0, &mut state ) != 0
+        };
+        if success {
+            Ok(state == WIREGUARD_STATE_UP)
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+
     /// Puts this adapter into the up state
-    pub fn up(&self) -> bool {
-        unsafe {
+    pub fn up(&self) -> Result<(), std::io::Error> {
+        let success = unsafe {
             self.wireguard
                 .WireGuardSetAdapterState(self.adapter.0, WIREGUARD_STATE_UP)
                 != 0
+        };
+        if success {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
         }
     }
 
     /// Puts this adapter into the down state
-    pub fn down(&self) -> bool {
-        unsafe {
+    pub fn down(&self) -> Result<(), std::io::Error> {
+        let success = unsafe {
             self.wireguard
                 .WireGuardSetAdapterState(self.adapter.0, WIREGUARD_STATE_DOWN)
                 != 0
+        };
+        if success {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
         }
     }
 
