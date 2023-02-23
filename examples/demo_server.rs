@@ -68,7 +68,7 @@ fn main() {
         Ok(()) => {}
         Err(err) => panic!("Failed to set default route: {}", err),
     }
-    assert!(adapter.up());
+    assert!(adapter.up().is_ok());
 
     println!("Printing peer bandwidth statistics");
     println!("Press enter to exit");
