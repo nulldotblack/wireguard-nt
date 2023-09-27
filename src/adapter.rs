@@ -15,11 +15,12 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::ptr;
 use std::sync::Arc;
 
-use crate::wireguard_nt_raw::{WIREGUARD_ALLOWED_IP, WIREGUARD_INTERFACE, WIREGUARD_PEER};
+use crate::wireguard_nt_raw::{GUID, WIREGUARD_ALLOWED_IP, WIREGUARD_INTERFACE, WIREGUARD_PEER};
 use ipnet::Ipv4Net;
 use ipnet::{IpNet, Ipv6Net};
 use rand::Rng;
 use widestring::U16CString;
+use winapi::shared::nldef::RouterDiscoveryDisabled;
 use winapi::shared::winerror::ERROR_MORE_DATA;
 use winapi::um::errhandlingapi::GetLastError;
 
@@ -385,13 +386,18 @@ impl Adapter {
                         *default_route.NextHop.si_family_mut() = AF_INET6 as u16;
                     }
                 }
-                default_route.Metric = 5;
+                default_route.Metric = 0;
 
                 let err = CreateIpForwardEntry2(&default_route);
                 if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
                     return win_error("Failed to set default route", err);
                 }
             }
+
+            use winapi::shared::netioapi::{InitializeIpInterfaceEntry, MIB_IPINTERFACE_ROW};
+            let mut ip_interface: MIB_IPINTERFACE_ROW = std::mem::zeroed();
+            InitializeIpInterfaceEntry(&mut ip_interface);
+            ip_interface.InterfaceLuid = std::mem::transmute(luid);
 
             for interface_addr in interface_addrs {
                 let mut address_row: MIB_UNICASTIPADDRESS_ROW = std::mem::zeroed();
@@ -402,11 +408,15 @@ impl Adapter {
 
                 match interface_addr {
                     IpNet::V4(interface_addr_v4) => {
+                        ip_interface.Family = AF_INET as u16;
+
                         address_row.Address.Ipv4_mut().sin_family = AF_INET as u16;
                         address_row.Address.Ipv4_mut().sin_addr =
                             std::mem::transmute(interface_addr_v4.addr().octets());
                     }
                     IpNet::V6(interface_addr_v6) => {
+                        ip_interface.Family = AF_INET6 as u16;
+
                         address_row.Address.Ipv6_mut().sin6_family = AF_INET6 as u16;
                         address_row.Address.Ipv6_mut().sin6_addr =
                             std::mem::transmute(interface_addr_v6.addr().octets());
@@ -419,17 +429,16 @@ impl Adapter {
                 }
             }
 
-            use winapi::shared::netioapi::{InitializeIpInterfaceEntry, MIB_IPINTERFACE_ROW};
-            let mut ip_interface: MIB_IPINTERFACE_ROW = std::mem::zeroed();
-            InitializeIpInterfaceEntry(&mut ip_interface);
-            ip_interface.InterfaceLuid = std::mem::transmute(luid);
-            ip_interface.Family = AF_INET6 as u16;
-
             use winapi::shared::netioapi::{GetIpInterfaceEntry, SetIpInterfaceEntry};
             let err = GetIpInterfaceEntry(&mut ip_interface);
             if err != ERROR_SUCCESS {
                 return win_error("Failed to get IP interface", err);
             }
+
+            ip_interface.RouterDiscoveryBehavior = RouterDiscoveryDisabled;
+            ip_interface.DadTransmits = 0;
+            ip_interface.ManagedAddressConfigurationSupported = 0;
+            ip_interface.OtherStatefulConfigurationSupported = 0;
             ip_interface.UseAutomaticMetric = 0;
             ip_interface.Metric = 0;
             ip_interface.NlMtu = 1420;
