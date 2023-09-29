@@ -385,7 +385,7 @@ impl Adapter {
                         *default_route.NextHop.si_family_mut() = AF_INET6 as u16;
                     }
                 }
-                default_route.Metric = 5;
+                default_route.Metric = 0;
 
                 let err = CreateIpForwardEntry2(&default_route);
                 if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
@@ -423,7 +423,7 @@ impl Adapter {
             let mut ip_interface: MIB_IPINTERFACE_ROW = std::mem::zeroed();
             InitializeIpInterfaceEntry(&mut ip_interface);
             ip_interface.InterfaceLuid = std::mem::transmute(luid);
-            ip_interface.Family = AF_INET6 as u16;
+            ip_interface.Family = AF_INET as u16;
 
             use winapi::shared::netioapi::{GetIpInterfaceEntry, SetIpInterfaceEntry};
             let err = GetIpInterfaceEntry(&mut ip_interface);
@@ -431,7 +431,7 @@ impl Adapter {
                 return win_error("Failed to get IP interface", err);
             }
             ip_interface.UseAutomaticMetric = 0;
-            ip_interface.Metric = 1;
+            ip_interface.Metric = 0;
             ip_interface.NlMtu = 1420;
             ip_interface.SitePrefixLength = 0;
             let err = SetIpInterfaceEntry(&mut ip_interface);
