@@ -20,6 +20,7 @@ use ipnet::Ipv4Net;
 use ipnet::{IpNet, Ipv6Net};
 use rand::Rng;
 use widestring::U16CString;
+use winapi::shared::nldef::RouterDiscoveryDisabled;
 use winapi::shared::winerror::ERROR_MORE_DATA;
 use winapi::um::errhandlingapi::GetLastError;
 
@@ -430,6 +431,11 @@ impl Adapter {
             if err != ERROR_SUCCESS {
                 return win_error("Failed to get IP interface", err);
             }
+
+            ip_interface.RouterDiscoveryBehavior = RouterDiscoveryDisabled;
+            ip_interface.DadTransmits = 0;
+            ip_interface.ManagedAddressConfigurationSupported = 0;
+            ip_interface.OtherStatefulConfigurationSupported = 0;
             ip_interface.UseAutomaticMetric = 0;
             ip_interface.Metric = 0;
             ip_interface.NlMtu = 1420;
