@@ -479,7 +479,7 @@ impl Adapter {
     }
 
     pub fn get_guid(&self) -> GUID {
-        self.adapter.0.CfgInstanceID
+        unsafe { (*self.adapter.0).CfgInstanceID }
     }
 
     /// Sets the logging level of this adapter
