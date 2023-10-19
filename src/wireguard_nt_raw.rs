@@ -884,17 +884,17 @@ use winapi::um::winnt::HANDLE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _WIREGUARD_ADAPTER {
-    // SwDevice: HSWDEVICE,
-    DevInfo: HDEVINFO,
-    DevInfoData: SP_DEVINFO_DATA,
-    InterfaceFilename: *mut WCHAR,
-    CfgInstanceID: GUID,
-    DevInstanceID: [WCHAR; MAX_DEVICE_ID_LEN],
-    LuidIndex: DWORD,
-    IfType: DWORD,
-    IfIndex: DWORD,
-    LogThread: HANDLE,
-    LogState: DWORD,
+    // pub SwDevice: HSWDEVICE,
+    pub DevInfo: HDEVINFO,
+    pub DevInfoData: SP_DEVINFO_DATA,
+    pub InterfaceFilename: *mut WCHAR,
+    pub CfgInstanceID: GUID,
+    pub DevInstanceID: [WCHAR; MAX_DEVICE_ID_LEN],
+    pub LuidIndex: DWORD,
+    pub IfType: DWORD,
+    pub IfIndex: DWORD,
+    pub LogThread: HANDLE,
+    pub LogState: DWORD,
 }
 #[doc = " A handle representing WireGuard adapter"]
 pub type WIREGUARD_ADAPTER_HANDLE = *mut _WIREGUARD_ADAPTER;
