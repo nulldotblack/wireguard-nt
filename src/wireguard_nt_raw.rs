@@ -888,7 +888,7 @@ pub struct _WIREGUARD_ADAPTER {
     pub DevInfo: HDEVINFO,
     pub DevInfoData: SP_DEVINFO_DATA,
     pub InterfaceFilename: *mut WCHAR,
-    pub CfgInstanceID: GUID,
+    pub CfgInstanceID: winapi::shared::guiddef::GUID,
     pub DevInstanceID: [WCHAR; MAX_DEVICE_ID_LEN],
     pub LuidIndex: DWORD,
     pub IfType: DWORD,
