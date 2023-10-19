@@ -478,7 +478,7 @@ impl Adapter {
         x
     }
 
-    pub fn get_guid(&self) -> GUID {
+    pub fn get_guid(&self) -> winapi::shared::guiddef::GUID {
         unsafe { (*self.adapter.0).CfgInstanceID }
     }
 
