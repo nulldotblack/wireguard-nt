@@ -23,7 +23,7 @@ bitflags = "1.3"
 
 libloading = "0.7"
 ipnet = "2.3"
-winapi = { version = "0.3", features = ["ws2def", "netioapi", "nldef"] }
+winapi = { version = "0.3", features = ["ws2def", "netioapi", "nldef", "setupapi", "cfgmgr32"] }
 
 [dev-dependencies]
 env_logger = "0.9"

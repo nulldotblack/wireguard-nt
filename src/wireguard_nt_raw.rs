@@ -876,10 +876,25 @@ fn bindgen_test_layout__SOCKADDR_INET() {
     );
 }
 pub type SOCKADDR_INET = _SOCKADDR_INET;
+
+use winapi::um::cfgmgr32::MAX_DEVICE_ID_LEN;
+use winapi::um::setupapi::{HDEVINFO, SP_DEVINFO_DATA};
+use winapi::um::winnt::HANDLE;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _WIREGUARD_ADAPTER {
-    _unused: [u8; 0],
+    // SwDevice: HSWDEVICE,
+    DevInfo: HDEVINFO,
+    DevInfoData: SP_DEVINFO_DATA,
+    InterfaceFilename: *mut WCHAR,
+    CfgInstanceID: GUID,
+    DevInstanceID: [WCHAR; MAX_DEVICE_ID_LEN],
+    LuidIndex: DWORD,
+    IfType: DWORD,
+    IfIndex: DWORD,
+    LogThread: HANDLE,
+    LogState: DWORD,
 }
 #[doc = " A handle representing WireGuard adapter"]
 pub type WIREGUARD_ADAPTER_HANDLE = *mut _WIREGUARD_ADAPTER;
