@@ -882,7 +882,7 @@ use winapi::um::setupapi::{HDEVINFO, SP_DEVINFO_DATA};
 use winapi::um::winnt::HANDLE;
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct _WIREGUARD_ADAPTER {
     // pub SwDevice: HSWDEVICE,
     pub DevInfo: HDEVINFO,
