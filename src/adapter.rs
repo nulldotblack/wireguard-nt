@@ -424,7 +424,7 @@ impl Adapter {
             let mut ip_interface: MIB_IPINTERFACE_ROW = std::mem::zeroed();
             InitializeIpInterfaceEntry(&mut ip_interface);
             ip_interface.InterfaceLuid = std::mem::transmute(luid);
-            ip_interface.Family = AF_INET as u16;
+            ip_interface.Family = AF_INET6 as u16;
 
             use winapi::shared::netioapi::{GetIpInterfaceEntry, SetIpInterfaceEntry};
             let err = GetIpInterfaceEntry(&mut ip_interface);
