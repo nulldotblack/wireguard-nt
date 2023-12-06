@@ -394,6 +394,11 @@ impl Adapter {
                 }
             }
 
+            use winapi::shared::netioapi::{InitializeIpInterfaceEntry, MIB_IPINTERFACE_ROW};
+            let mut ip_interface: MIB_IPINTERFACE_ROW = std::mem::zeroed();
+            InitializeIpInterfaceEntry(&mut ip_interface);
+            ip_interface.InterfaceLuid = std::mem::transmute(luid);
+
             for interface_addr in interface_addrs {
                 let mut address_row: MIB_UNICASTIPADDRESS_ROW = std::mem::zeroed();
                 InitializeUnicastIpAddressEntry(&mut address_row);
@@ -403,11 +408,15 @@ impl Adapter {
 
                 match interface_addr {
                     IpNet::V4(interface_addr_v4) => {
+                        ip_interface.Family = AF_INET as u16;
+
                         address_row.Address.Ipv4_mut().sin_family = AF_INET as u16;
                         address_row.Address.Ipv4_mut().sin_addr =
                             std::mem::transmute(interface_addr_v4.addr().octets());
                     }
                     IpNet::V6(interface_addr_v6) => {
+                        ip_interface.Family = AF_INET6 as u16;
+
                         address_row.Address.Ipv6_mut().sin6_family = AF_INET6 as u16;
                         address_row.Address.Ipv6_mut().sin6_addr =
                             std::mem::transmute(interface_addr_v6.addr().octets());
@@ -419,12 +428,6 @@ impl Adapter {
                     return win_error("Failed to set IP interface", err);
                 }
             }
-
-            use winapi::shared::netioapi::{InitializeIpInterfaceEntry, MIB_IPINTERFACE_ROW};
-            let mut ip_interface: MIB_IPINTERFACE_ROW = std::mem::zeroed();
-            InitializeIpInterfaceEntry(&mut ip_interface);
-            ip_interface.InterfaceLuid = std::mem::transmute(luid);
-            ip_interface.Family = AF_INET6 as u16;
 
             use winapi::shared::netioapi::{GetIpInterfaceEntry, SetIpInterfaceEntry};
             let err = GetIpInterfaceEntry(&mut ip_interface);
