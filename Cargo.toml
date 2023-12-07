@@ -16,7 +16,7 @@ default-target = "x86_64-pc-windows-msvc"
 targets = ["aarch64-pc-windows-msvc", "i686-pc-windows-msvc", "x86_64-pc-windows-msvc"]
 
 [dependencies]
-widestring = "0.4"
+widestring = "1"
 log = "0.4"
 rand = "0.8"
 bitflags = "1.3"
@@ -25,8 +25,8 @@ libloading = "0.7"
 ipnet = "2.3"
 winapi = { version = "0.3", features = ["ws2def", "netioapi", "nldef", "setupapi", "cfgmgr32"] }
 
-[dev-dependencies]
-env_logger = "0.9"
-base64 = "0.13"
-boringtun = "0.3"
-ipnet = "2.3"
+#[dev-dependencies]
+#env_logger = "0.9"
+#base64 = "0.13"
+#boringtun = "0.3"
+#ipnet = "2.3"
