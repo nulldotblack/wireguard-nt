@@ -481,10 +481,6 @@ impl Adapter {
         x
     }
 
-    pub fn get_guid(&self) -> winapi::shared::guiddef::GUID {
-        unsafe { (*self.adapter.0).CfgInstanceID }
-    }
-
     /// Sets the logging level of this adapter
     ///
     /// Log messages will be sent to the current logger (set using [`crate::set_logger`]
