@@ -9,7 +9,7 @@ use crate::util::{StructReader, UnsafeHandle};
 use crate::wireguard_nt_raw;
 use crate::WireGuardError;
 use std::mem::{align_of, size_of};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::ptr;
@@ -530,12 +530,6 @@ impl Adapter {
             public_key: wireguard_interface.PublicKey,
             peers: Vec::with_capacity(wireguard_interface.PeersCount as usize),
         };
-
-        let now = SystemTime::now();
-        let now_instant = Instant::now();
-        let unix_duration = now
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Time set before unix epoch");
 
         for _ in 0..wireguard_interface.PeersCount {
             // # Safety:
