@@ -466,10 +466,7 @@ impl Adapter {
     pub fn get_luid(&self) -> u64 {
         let mut luid = 0u64;
         let ptr = &mut luid as *mut u64 as *mut wireguard_nt_raw::_NET_LUID_LH;
-        unsafe {
-            self.wireguard
-                .WireGuardGetAdapterLUID(self.adapter.0, ptr)
-        };
+        unsafe { self.wireguard.WireGuardGetAdapterLUID(self.adapter.0, ptr) };
         luid
     }
 
@@ -501,9 +498,13 @@ impl Adapter {
                 &mut size as _,
             )
         };
-        // Should never fail since we 
+        // Should never fail since we
         assert_eq!(res, 0, "Failed to query size of wireguard configuration");
-        assert_eq!(unsafe { GetLastError() }, ERROR_MORE_DATA, "WireGuardGetConfiguration returned invalid error for size request");
+        assert_eq!(
+            unsafe { GetLastError() },
+            ERROR_MORE_DATA,
+            "WireGuardGetConfiguration returned invalid error for size request"
+        );
         assert_ne!(size, 0, "Wireguard config is zero bytes"); // size has been updated
         let align = align_of::<WIREGUARD_INTERFACE>();
         let mut reader = StructReader::new(size as usize, align);
@@ -562,7 +563,8 @@ impl Adapter {
             };
             // The number of 100ns intervals between 1-1-1600 and 1-1-1970
             const UNIX_EPOCH_FROM_1_1_1600: u64 = 116444736000000000;
-            let ns_from_unix_epoch = peer.LastHandshake.saturating_sub(UNIX_EPOCH_FROM_1_1_1600) * 100;
+            let ns_from_unix_epoch =
+                peer.LastHandshake.saturating_sub(UNIX_EPOCH_FROM_1_1_1600) * 100;
             let last_handshake = SystemTime::UNIX_EPOCH + Duration::from_nanos(ns_from_unix_epoch);
 
             let mut wg_peer = WireguardPeer {

@@ -84,7 +84,9 @@ fn main() {
             }
             let stats = adapter.get_config();
             for peer in stats.peers {
-                let handshake_age = SystemTime::now().duration_since(peer.last_handshake).unwrap_or_default();
+                let handshake_age = SystemTime::now()
+                    .duration_since(peer.last_handshake)
+                    .unwrap_or_default();
                 println!(
                     "  {:?}, up: {}, down: {}, handsake: {}s ago",
                     peer.allowed_ips,
