@@ -8,8 +8,8 @@ use std::{alloc::Layout, sync::Arc};
 /// A wrapper struct that allows a type to be Send and Sync
 pub(crate) struct UnsafeHandle<T>(pub T);
 
-/// We never read from the pointer. It only serves as a handle we pass to the kernel or C code that
-/// doesn't have the same mutable aliasing restrictions we have in Rust
+/// We never read from the pointer. It only serves as a handle we pass to the kernel or C code
+/// (where locks are used internally)
 unsafe impl<T> Send for UnsafeHandle<T> {}
 unsafe impl<T> Sync for UnsafeHandle<T> {}
 
@@ -45,10 +45,11 @@ impl StructWriter {
     /// the next call to [`write`] will return a reference to an adjacent memory location.
     ///
     /// # Safety:
-    /// The caller must ensure the internal pointer is aligned suitably for writing to a T.
+    /// 1. The caller must ensure the internal pointer is aligned suitably for writing to a T.
     /// In most C APIs (like Wireguard NT) the structs are setup in such a way that calling write
     /// repeatedly to pack data into the buffer always yields a struct that is aligned because the
     /// previous struct was aligned.
+    /// 2. The caller must ensure that the zero bit pattern is valid for type T
     ///
     /// # Panics
     /// 1. If writing a struct of size T would overflow the buffer.
@@ -147,6 +148,7 @@ impl StructReader {
     }
 
     /// Returns true if this reader's capacity is full, false otherwise
+    #[allow(dead_code)]
     pub fn is_full(&self) -> bool {
         self.layout.size() == self.offset
     }
@@ -177,7 +179,7 @@ mod tests {
         };
         let mut reader =
             StructReader::new(size_of_val(&expected_data), align_of_val(&expected_data));
-        let byte_buffer: &mut [u8; 8] = unsafe { std::mem::transmute(reader.ptr()) };
+        let byte_buffer: &mut [u8; 8] = unsafe { &mut *(reader.ptr() as *mut [u8; 8]) };
         byte_buffer[0] = 0b10000001;
         byte_buffer[4] = 0x0;
         byte_buffer[5] = 0xFF;

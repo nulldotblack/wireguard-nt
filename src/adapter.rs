@@ -263,7 +263,7 @@ impl Adapter {
             // `align_of::<WIREGUARD_INTERFACE` is 8, WIREGUARD_PEER has no special alignment
             // requirements, and writer is already aligned to hold `WIREGUARD_INTERFACE` structs,
             // therefore we uphold the alignment requirements of `write`
-            let mut wg_peer: &mut WIREGUARD_PEER = unsafe { writer.write() };
+            let wg_peer: &mut WIREGUARD_PEER = unsafe { writer.write() };
 
             wg_peer.Flags = {
                 let mut flags = PeerFlags::HAS_ENDPOINT;
@@ -304,7 +304,7 @@ impl Adapter {
             for allowed_ip in &peer.allowed_ips {
                 // Safety:
                 // Same as above, `writer` is aligned because it was aligned before
-                let mut wg_allowed_ip: &mut WIREGUARD_ALLOWED_IP = unsafe { writer.write() };
+                let wg_allowed_ip: &mut WIREGUARD_ALLOWED_IP = unsafe { writer.write() };
                 match allowed_ip {
                     IpNet::V4(v4) => {
                         let addr = unsafe { std::mem::transmute(v4.addr().octets()) };
@@ -357,7 +357,7 @@ impl Adapter {
             use winapi::shared::winerror::{ERROR_OBJECT_ALREADY_EXISTS, ERROR_SUCCESS};
             use winapi::shared::ws2def::{AF_INET, AF_INET6};
 
-            for allowed_ip in config.peers.iter().map(|p| p.allowed_ips.iter()).flatten() {
+            for allowed_ip in config.peers.iter().flat_map(|p| p.allowed_ips.iter()) {
                 use winapi::shared::netioapi::{InitializeIpForwardEntry, MIB_IPFORWARD_ROW2};
                 let mut default_route: MIB_IPFORWARD_ROW2 = std::mem::zeroed();
                 InitializeIpForwardEntry(&mut default_route);
@@ -464,12 +464,13 @@ impl Adapter {
     /// Returns the adapter's LUID.
     /// This is a 64bit unique identifier that windows uses when referencing this adapter
     pub fn get_luid(&self) -> u64 {
-        let mut x = 0u64;
+        let mut luid = 0u64;
+        let ptr = &mut luid as *mut u64 as *mut wireguard_nt_raw::_NET_LUID_LH;
         unsafe {
             self.wireguard
-                .WireGuardGetAdapterLUID(self.adapter.0, std::mem::transmute(&mut x))
+                .WireGuardGetAdapterLUID(self.adapter.0, ptr)
         };
-        x
+        luid
     }
 
     /// Sets the logging level of this adapter
@@ -500,9 +501,10 @@ impl Adapter {
                 &mut size as _,
             )
         };
-        assert_eq!(res, 0);
-        assert_eq!(unsafe { GetLastError() }, ERROR_MORE_DATA);
-        assert_ne!(size, 0); // size has been updated
+        // Should never fail since we 
+        assert_eq!(res, 0, "Failed to query size of wireguard configuration");
+        assert_eq!(unsafe { GetLastError() }, ERROR_MORE_DATA, "WireGuardGetConfiguration returned invalid error for size request");
+        assert_ne!(size, 0, "Wireguard config is zero bytes"); // size has been updated
         let align = align_of::<WIREGUARD_INTERFACE>();
         let mut reader = StructReader::new(size as usize, align);
         let res = unsafe {
@@ -535,10 +537,6 @@ impl Adapter {
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("Time set before unix epoch");
 
-        // The number of 100ns intervals between 1-1-1600 and 1-1-1970
-        const UNIX_EPOCH_FROM_1_1_1600: u64 = 116444736000000000;
-        //calculate now based on the number of 100ns intervals since 1-1-1600
-        let now_since_1600 = UNIX_EPOCH_FROM_1_1_1600 + (unix_duration.as_nanos() / 100u128) as u64;
         for _ in 0..wireguard_interface.PeersCount {
             // # Safety:
             // 1. `WireGuardGetConfiguration` writes a `WIREGUARD_PEER` immediately after the WIREGUARD_INTERFACE we read above.
@@ -568,12 +566,10 @@ impl Adapter {
                     panic!("Illegal address family {}", address_family);
                 }
             };
-
-            //Calculate the difference in 100ns steps between the last handshake and now
-            let handshake_delta = now_since_1600 - peer.LastHandshake;
-
-            //The time of the lash handshake is now - the delta
-            let last_handshake = now_instant - Duration::from_nanos(handshake_delta * 100);
+            // The number of 100ns intervals between 1-1-1600 and 1-1-1970
+            const UNIX_EPOCH_FROM_1_1_1600: u64 = 116444736000000000;
+            let ns_from_unix_epoch = peer.LastHandshake.saturating_sub(UNIX_EPOCH_FROM_1_1_1600) * 100;
+            let last_handshake = SystemTime::UNIX_EPOCH + Duration::from_nanos(ns_from_unix_epoch);
 
             let mut wg_peer = WireguardPeer {
                 flags: peer.Flags as u32,
@@ -633,7 +629,7 @@ pub struct WireguardPeer {
     /// Number of bytes received
     pub rx_bytes: u64,
     /// Time of the last handshake
-    pub last_handshake: Instant,
+    pub last_handshake: SystemTime,
     /// Number of allowed IP structs following this struct
     pub allowed_ips: Vec<IpNet>,
 }

@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 use ipnet::{Ipv4Net, Ipv6Net};
 use log::*;
@@ -84,7 +84,7 @@ fn main() {
             }
             let stats = adapter.get_config();
             for peer in stats.peers {
-                let handshake_age = Instant::now().duration_since(peer.last_handshake);
+                let handshake_age = SystemTime::now().duration_since(peer.last_handshake).unwrap_or_default();
                 println!(
                     "  {:?}, up: {}, down: {}, handsake: {}s ago",
                     peer.allowed_ips,
@@ -116,7 +116,7 @@ fn get_demo_server_config(pub_key: &[u8]) -> Result<(Vec<u8>, Ipv4Addr, SocketAd
         .collect();
 
     let mut s: TcpStream = TcpStream::connect_timeout(
-        addrs.get(0).expect("Failed to resolve demo server DNS"),
+        addrs.first().expect("Failed to resolve demo server DNS"),
         Duration::from_secs(5),
     )
     .expect("Failed to open connection to demo server");
