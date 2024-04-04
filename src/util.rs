@@ -43,6 +43,7 @@ impl StructWriter {
     /// Returns a reference of the desired type, which can be used to write a T into the
     /// buffer at the internal pointer. The internal pointer will be advanced by `size_of::<T>()` so that
     /// the next call to [`write`] will return a reference to an adjacent memory location.
+    /// The returned refrence will be the zero bit pattern initially.
     ///
     /// # Safety:
     /// 1. The caller must ensure the internal pointer is aligned suitably for writing to a T.
@@ -124,7 +125,7 @@ impl StructReader {
     /// # Panics
     /// 1. If reading a struct of size T would overflow the buffer.
     /// 2. If the internal pointer does not meet the alignment requirements of T.
-    pub unsafe fn read<T>(&mut self) -> T {
+    pub unsafe fn read<T>(&mut self) -> &T {
         let size = std::mem::size_of::<T>();
         if size + self.offset > self.layout.size() {
             panic!(
@@ -140,10 +141,10 @@ impl StructReader {
         self.offset += size;
         assert_eq!(ptr as usize % std::mem::align_of::<T>(), 0);
 
-        std::ptr::read(ptr as _)
+        unsafe { &*ptr.cast::<T>() }
     }
-
-    pub fn ptr(&self) -> *const u8 {
+    
+    pub fn ptr_mut(&self) -> *mut u8 {
         self.start
     }
 
@@ -179,13 +180,13 @@ mod tests {
         };
         let mut reader =
             StructReader::new(size_of_val(&expected_data), align_of_val(&expected_data));
-        let byte_buffer: &mut [u8; 8] = unsafe { &mut *(reader.ptr() as *mut [u8; 8]) };
+        let byte_buffer: &mut [u8; 8] = unsafe { &mut *(reader.ptr_mut() as *mut [u8; 8]) };
         byte_buffer[0] = 0b10000001;
         byte_buffer[4] = 0x0;
         byte_buffer[5] = 0xFF;
         byte_buffer[6] = 0xFF;
         byte_buffer[7] = 0x0;
-        let actual_data: Data = unsafe { reader.read() };
+        let actual_data: &Data = unsafe { reader.read() };
         assert_eq!(actual_data.field_a, expected_data.field_a);
         assert_eq!(actual_data.field_b, expected_data.field_b);
     }

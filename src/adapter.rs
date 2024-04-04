@@ -511,7 +511,7 @@ impl Adapter {
         let res = unsafe {
             self.wireguard.WireGuardGetConfiguration(
                 self.adapter.0,
-                reader.ptr() as _,
+                reader.ptr_mut().cast(),
                 &mut size as _,
             )
         };
@@ -523,7 +523,7 @@ impl Adapter {
         // 3. We calculate the size of `reader` with the first call to `WireGuardGetConfiguration`. Wireguard writes at
         //    least one `WIREGUARD_INTERFACE`, and size is updated accordingly, therefore `reader`'s allocation is at least
         //    the size of a `WIREGUARD_INTERFACE`
-        let wireguard_interface: WIREGUARD_INTERFACE = unsafe { reader.read() };
+        let wireguard_interface: &WIREGUARD_INTERFACE = unsafe { reader.read() };
         let mut wg_interface = WireguardInterface {
             flags: wireguard_interface.Flags as u32,
             listen_port: wireguard_interface.ListenPort,
@@ -536,7 +536,7 @@ impl Adapter {
             // # Safety:
             // 1. `WireGuardGetConfiguration` writes a `WIREGUARD_PEER` immediately after the WIREGUARD_INTERFACE we read above.
             // 2. We rely on Wireguard-NT to specify the number of peers written, and therefore we never read too many times unless Wireguard-NT (wrongly) tells us to
-            let peer: WIREGUARD_PEER = unsafe { reader.read() };
+            let peer: &WIREGUARD_PEER = unsafe { reader.read() };
             let endpoint = peer.Endpoint;
             let address_family = unsafe { endpoint.si_family } as i32;
             let endpoint = match address_family {
@@ -582,7 +582,7 @@ impl Adapter {
                 // # Safety:
                 // 1. `WireGuardGetConfiguration` writes zero or more `WIREGUARD_ALLOWED_IP`s immediately after the WIREGUARD_PEER we read above.
                 // 2. We rely on Wireguard-NT to specify the number of allowed ips written, and therefore we never read too many times unless Wireguard-NT (wrongly) tells us to
-                let allowed_ip: WIREGUARD_ALLOWED_IP = unsafe { reader.read() };
+                let allowed_ip: &WIREGUARD_ALLOWED_IP = unsafe { reader.read() };
                 let prefix_length = allowed_ip.Cidr;
                 let allowed_ip = match allowed_ip.AddressFamily as i32 {
                     winapi::shared::ws2def::AF_INET => {
