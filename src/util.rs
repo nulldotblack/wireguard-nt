@@ -143,7 +143,7 @@ impl StructReader {
 
         unsafe { &*ptr.cast::<T>() }
     }
-    
+
     pub fn ptr_mut(&self) -> *mut u8 {
         self.start
     }
