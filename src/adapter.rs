@@ -561,11 +561,15 @@ impl Adapter {
                     panic!("Illegal address family {}", address_family);
                 }
             };
-            // The number of 100ns intervals between 1-1-1600 and 1-1-1970
-            const UNIX_EPOCH_FROM_1_1_1600: u64 = 116444736000000000;
-            let ns_from_unix_epoch =
-                peer.LastHandshake.saturating_sub(UNIX_EPOCH_FROM_1_1_1600) * 100;
-            let last_handshake = SystemTime::UNIX_EPOCH + Duration::from_nanos(ns_from_unix_epoch);
+            let last_handshake = if peer.LastHandshake == 0 {
+                None
+            } else {
+                // The number of 100ns intervals between 1-1-1600 and 1-1-1970
+                const UNIX_EPOCH_FROM_1_1_1600: u64 = 116444736000000000;
+                let ns_from_unix_epoch =
+                    peer.LastHandshake.saturating_sub(UNIX_EPOCH_FROM_1_1_1600) * 100;
+                Some(SystemTime::UNIX_EPOCH + Duration::from_nanos(ns_from_unix_epoch))
+            };
 
             let mut wg_peer = WireguardPeer {
                 flags: peer.Flags as u32,
@@ -624,8 +628,8 @@ pub struct WireguardPeer {
     pub tx_bytes: u64,
     /// Number of bytes received
     pub rx_bytes: u64,
-    /// Time of the last handshake
-    pub last_handshake: SystemTime,
+    /// Time of the last handshake, `None` if no handshake has occured
+    pub last_handshake: Option<SystemTime>,
     /// Number of allowed IP structs following this struct
     pub allowed_ips: Vec<IpNet>,
 }

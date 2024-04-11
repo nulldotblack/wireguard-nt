@@ -70,33 +70,36 @@ fn main() {
     }
     assert!(adapter.up());
 
+    // Go to http://demo.wireguard.com/ and see the bandwidth numbers change!
     println!("Printing peer bandwidth statistics");
     println!("Press enter to exit");
     let done = Arc::new(AtomicBool::new(false));
     let done2 = Arc::clone(&done);
     let thread = std::thread::spawn(move || {
         'outer: loop {
+            let stats = adapter.get_config();
+            for peer in stats.peers {
+                let handshake_age = peer.last_handshake.map(|h| {
+                    SystemTime::now()
+                        .duration_since(h)
+                        .unwrap_or_default()
+                });
+                let handshake_msg = match handshake_age {
+                    Some(age) => format!("handshake performed {:.2}s ago", age.as_secs_f32()),
+                    None => format!("no active handshake"),
+                };
+
+                println!(
+                    "  {:?}, {} bytes up, {} bytes down, {handshake_msg}",
+                    peer.allowed_ips, peer.tx_bytes, peer.rx_bytes
+                );
+            }
             for _ in 0..10 {
                 if done2.load(Ordering::Relaxed) {
                     break 'outer;
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
-            let stats = adapter.get_config();
-            for peer in stats.peers {
-                let handshake_age = SystemTime::now()
-                    .duration_since(peer.last_handshake)
-                    .unwrap_or_default();
-                println!(
-                    "  {:?}, up: {}, down: {}, handsake: {}s ago",
-                    peer.allowed_ips,
-                    peer.tx_bytes,
-                    peer.rx_bytes,
-                    handshake_age.as_secs_f32()
-                );
-            }
-            // Go to 163.172.161.0 in your browser to see bandwidth numbers here change
-            // because only traffic to that ip is routed through the interface
         }
     });
 
