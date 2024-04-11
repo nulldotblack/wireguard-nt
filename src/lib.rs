@@ -1,7 +1,7 @@
 //! Safe rust idiomatic bindings for the WireGuard NT C library: <https://git.zx2c4.com/wireguard-nt/about>
 //!
 //! Features of the WireGuard NT library are wrapped using pure rust types and functions to make
-//! usage feel ergonomic.  
+//! usage ergonomic.
 //!
 //! # Usage
 //!
@@ -9,7 +9,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! wireguard-nt = "0.2"
+//! wireguard-nt = "0.4"
 //! ```
 //!
 //! Inside your code load the wireguard.dll signed driver file, downloaded from <https://git.zx2c4.com/wireguard-nt/about>

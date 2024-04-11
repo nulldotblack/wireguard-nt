@@ -3,6 +3,17 @@
 This format is based on [Keep a Changelog](https://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](https://semver.org).
 
+
+## [0.4.0] - 2024-04-11
+
+### Fixed
+
+- Correct printing of handshake time when an adapter has not yet completed the handshake in `demo_server` example.
+
+### Breaking Changes
+
+- `last_handshake` in `WireguardPeer` changed from a `std::time::Instant` to a `std::option::Option<std::time::SystemTime>` to reflect non handshake state.
+
 ## [0.3.0] - 2021-11-23
 
 ### Added
