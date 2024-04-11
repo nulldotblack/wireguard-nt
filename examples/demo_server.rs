@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 use ipnet::{Ipv4Net, Ipv6Net};
 use log::*;
@@ -70,31 +70,32 @@ fn main() {
     }
     assert!(adapter.up());
 
+    // Go to http://demo.wireguard.com/ and see the bandwidth numbers change!
     println!("Printing peer bandwidth statistics");
     println!("Press enter to exit");
     let done = Arc::new(AtomicBool::new(false));
     let done2 = Arc::clone(&done);
-    let thread = std::thread::spawn(move || {
-        'outer: loop {
-            for _ in 0..10 {
-                if done2.load(Ordering::Relaxed) {
-                    break 'outer;
-                }
-                std::thread::sleep(Duration::from_millis(100));
+    let thread = std::thread::spawn(move || 'outer: loop {
+        let stats = adapter.get_config();
+        for peer in stats.peers {
+            let handshake_age = peer
+                .last_handshake
+                .map(|h| SystemTime::now().duration_since(h).unwrap_or_default());
+            let handshake_msg = match handshake_age {
+                Some(age) => format!("handshake performed {:.2}s ago", age.as_secs_f32()),
+                None => format!("no active handshake"),
+            };
+
+            println!(
+                "  {:?}, {} bytes up, {} bytes down, {handshake_msg}",
+                peer.allowed_ips, peer.tx_bytes, peer.rx_bytes
+            );
+        }
+        for _ in 0..10 {
+            if done2.load(Ordering::Relaxed) {
+                break 'outer;
             }
-            let stats = adapter.get_config();
-            for peer in stats.peers {
-                let handshake_age = Instant::now().duration_since(peer.last_handshake);
-                println!(
-                    "  {:?}, up: {}, down: {}, handsake: {}s ago",
-                    peer.allowed_ips,
-                    peer.tx_bytes,
-                    peer.rx_bytes,
-                    handshake_age.as_secs_f32()
-                );
-            }
-            // Go to 163.172.161.0 in your browser to see bandwidth numbers here change
-            // because only traffic to that ip is routed through the interface
+            std::thread::sleep(Duration::from_millis(100));
         }
     });
 
@@ -116,7 +117,7 @@ fn get_demo_server_config(pub_key: &[u8]) -> Result<(Vec<u8>, Ipv4Addr, SocketAd
         .collect();
 
     let mut s: TcpStream = TcpStream::connect_timeout(
-        addrs.get(0).expect("Failed to resolve demo server DNS"),
+        addrs.first().expect("Failed to resolve demo server DNS"),
         Duration::from_secs(5),
     )
     .expect("Failed to open connection to demo server");
