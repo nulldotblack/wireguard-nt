@@ -3,7 +3,7 @@
 Safe rust idiomatic bindings for the WireGuard NT C library: <https://git.zx2c4.com/wireguard-nt/about>
 
 Features of the WireGuard NT library are wrapped using pure rust types and functions to make
-usage feel ergonomic.
+usage ergonomic.
 
 ## Usage
 
@@ -11,7 +11,7 @@ Add a dependency on this library to your `Cargo.toml`
 
 ```toml
 [dependencies]
-wireguard-nt = "0.2"
+wireguard-nt = "0.4"
 ```
 
 Inside your code load the wireguard.dll signed driver file, downloaded from <https://git.zx2c4.com/wireguard-nt/about>
@@ -68,7 +68,7 @@ let internal_prefix_length = 24;
 let internal_ipnet = ipnet::Ipv4Net::new(internal_ip, internal_prefix_length).unwrap();
 //Set up the routing table with the allowed ips for our peers,
 //and assign an ip to the interface
-adapter.set_default_route(internal_ipnet, &interface).unwrap();
+adapter.set_default_route(&[internal_ipnet.into()], &interface).unwrap();
 
 //drop(adapter)
 //The adapter closes its resources when dropped
