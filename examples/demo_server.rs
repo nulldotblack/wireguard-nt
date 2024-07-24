@@ -10,8 +10,8 @@ use log::*;
 fn main() {
     env_logger::init();
 
-    let private = boringtun::crypto::x25519::X25519SecretKey::new();
-    let public = private.public_key();
+    let private = x25519_dalek::StaticSecret::random();
+    let public = x25519_dalek::PublicKey::from(&private);
 
     let (demo_pub, internal_ip, endpoint) =
         get_demo_server_config(public.as_bytes()).expect("Failed to get demo server credentials");
@@ -119,7 +119,7 @@ fn get_demo_server_config(pub_key: &[u8]) -> Result<(Vec<u8>, Ipv4Addr, SocketAd
 
     let mut encoded = base64::encode(pub_key);
     encoded.push('\n');
-    s.write(encoded.as_bytes())
+    s.write_all(encoded.as_bytes())
         .expect("Failed to write public key to server");
 
     let mut bytes = [0u8; 512];

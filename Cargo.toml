@@ -21,21 +21,12 @@ log = "0.4"
 rand = "0.8"
 bitflags = "2"
 
-libloading = "0.7"
+libloading = "0.8"
 ipnet = "2.3"
 windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_Networking",
     "Win32_Networking_WinSock",
-#    "Win32_Security",
-#    "Win32_Security_Authorization",
-#    "Win32_System_Rpc",
-#    "Win32_System_Memory",
-#    "Win32_System_Threading",
-#    "Win32_System_SystemServices",
-#    "Win32_System_SystemInformation",
-#    "Win32_System_LibraryLoader",
-#    "Win32_NetworkManagement_WindowsFilteringPlatform",
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis"
 ]}
@@ -43,5 +34,5 @@ windows-sys = { version = "0.52", features = [
 [dev-dependencies]
 env_logger = "0.9"
 base64 = "0.13"
-boringtun = "0.3"
+x25519-dalek = { version = "=2.0.0-rc.3", default-features = false, features = ["static_secrets", "getrandom"] }
 ipnet = "2"
