@@ -15,7 +15,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::ptr;
 use std::sync::Arc;
 
-use crate::wireguard_nt_raw::{GUID, WIREGUARD_ALLOWED_IP, WIREGUARD_INTERFACE, WIREGUARD_PEER};
+use crate::wireguard_nt_raw::{WIREGUARD_ALLOWED_IP, WIREGUARD_INTERFACE, WIREGUARD_PEER};
 use ipnet::Ipv4Net;
 use ipnet::{IpNet, Ipv6Net};
 use rand::Rng;
