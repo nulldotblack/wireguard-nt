@@ -57,7 +57,7 @@ typedef struct _WIREGUARD_ADAPTER *WIREGUARD_ADAPTER_HANDLE;
  * GetLastError.
  */
 typedef _Must_inspect_result_
-_Return_type_success_(return != NULL)
+        _Return_type_success_(return != NULL)
 _Post_maybenull_
 WIREGUARD_ADAPTER_HANDLE(WINAPI WIREGUARD_CREATE_ADAPTER_FUNC)
 (_In_z_ LPCWSTR Name, _In_z_ LPCWSTR TunnelType, _In_opt_ const GUID *RequestedGUID);
@@ -73,7 +73,7 @@ WIREGUARD_ADAPTER_HANDLE(WINAPI WIREGUARD_CREATE_ADAPTER_FUNC)
  * GetLastError.
  */
 typedef _Must_inspect_result_
-_Return_type_success_(return != NULL)
+        _Return_type_success_(return != NULL)
 _Post_maybenull_
 WIREGUARD_ADAPTER_HANDLE(WINAPI WIREGUARD_OPEN_ADAPTER_FUNC)(_In_z_ LPCWSTR Name);
 
@@ -132,9 +132,9 @@ typedef enum
  * @param Message       Message text.
  */
 typedef VOID(CALLBACK *WIREGUARD_LOGGER_CALLBACK)(
-    _In_ WIREGUARD_LOGGER_LEVEL Level,
-    _In_ DWORD64 Timestamp,
-    _In_z_ LPCWSTR Message);
+_In_ WIREGUARD_LOGGER_LEVEL Level,
+_In_ DWORD64 Timestamp,
+_In_z_ LPCWSTR Message);
 
 /**
  * Sets logger callback function.
@@ -203,7 +203,7 @@ BOOL(WINAPI WIREGUARD_SET_ADAPTER_STATE_FUNC)
  *         get extended error information, call GetLastError.
  */
 typedef _Must_inspect_result_
-_Return_type_success_(return != FALSE)
+        _Return_type_success_(return != FALSE)
 BOOL(WINAPI WIREGUARD_GET_ADAPTER_STATE_FUNC)
 (_In_ WIREGUARD_ADAPTER_HANDLE Adapter, _Out_ WIREGUARD_ADAPTER_STATE *State);
 
@@ -212,13 +212,13 @@ BOOL(WINAPI WIREGUARD_GET_ADAPTER_STATE_FUNC)
 typedef struct _WIREGUARD_ALLOWED_IP WIREGUARD_ALLOWED_IP;
 struct ALIGNED(8) _WIREGUARD_ALLOWED_IP
 {
-    union
-    {
-        IN_ADDR V4;
-        IN6_ADDR V6;
-    } Address;                    /**< IP address */
-    ADDRESS_FAMILY AddressFamily; /**< Address family, either AF_INET or AF_INET6 */
-    BYTE Cidr;                    /**< CIDR of allowed IPs */
+union
+{
+    IN_ADDR V4;
+    IN6_ADDR V6;
+} Address;                    /**< IP address */
+ADDRESS_FAMILY AddressFamily; /**< Address family, either AF_INET or AF_INET6 */
+BYTE Cidr;                    /**< CIDR of allowed IPs */
 };
 
 typedef enum
@@ -235,16 +235,16 @@ typedef enum
 typedef struct _WIREGUARD_PEER WIREGUARD_PEER;
 struct ALIGNED(8) _WIREGUARD_PEER
 {
-    WIREGUARD_PEER_FLAG Flags;               /**< Bitwise combination of flags */
-    DWORD Reserved;                          /**< Reserved; must be zero */
-    BYTE PublicKey[WIREGUARD_KEY_LENGTH];    /**< Public key, the peer's primary identifier */
-    BYTE PresharedKey[WIREGUARD_KEY_LENGTH]; /**< Preshared key for additional layer of post-quantum resistance */
-    WORD PersistentKeepalive;                /**< Seconds interval, or 0 to disable */
-    SOCKADDR_INET Endpoint;                  /**< Endpoint, with IP address and UDP port number*/
-    DWORD64 TxBytes;                         /**< Number of bytes transmitted */
-    DWORD64 RxBytes;                         /**< Number of bytes received */
-    DWORD64 LastHandshake;                   /**< Time of the last handshake, in 100ns intervals since 1601-01-01 UTC */
-    DWORD AllowedIPsCount;                   /**< Number of allowed IP structs following this struct */
+WIREGUARD_PEER_FLAG Flags;               /**< Bitwise combination of flags */
+DWORD Reserved;                          /**< Reserved; must be zero */
+BYTE PublicKey[WIREGUARD_KEY_LENGTH];    /**< Public key, the peer's primary identifier */
+BYTE PresharedKey[WIREGUARD_KEY_LENGTH]; /**< Preshared key for additional layer of post-quantum resistance */
+WORD PersistentKeepalive;                /**< Seconds interval, or 0 to disable */
+SOCKADDR_INET Endpoint;                  /**< Endpoint, with IP address and UDP port number*/
+DWORD64 TxBytes;                         /**< Number of bytes transmitted */
+DWORD64 RxBytes;                         /**< Number of bytes received */
+DWORD64 LastHandshake;                   /**< Time of the last handshake, in 100ns intervals since 1601-01-01 UTC */
+DWORD AllowedIPsCount;                   /**< Number of allowed IP structs following this struct */
 };
 
 typedef enum
@@ -258,11 +258,11 @@ typedef enum
 typedef struct _WIREGUARD_INTERFACE WIREGUARD_INTERFACE;
 struct ALIGNED(8) _WIREGUARD_INTERFACE
 {
-    WIREGUARD_INTERFACE_FLAG Flags;        /**< Bitwise combination of flags */
-    WORD ListenPort;                       /**< Port for UDP listen socket, or 0 to choose randomly */
-    BYTE PrivateKey[WIREGUARD_KEY_LENGTH]; /**< Private key of interface */
-    BYTE PublicKey[WIREGUARD_KEY_LENGTH];  /**< Corresponding public key of private key */
-    DWORD PeersCount;                      /**< Number of peer structs following this struct */
+WIREGUARD_INTERFACE_FLAG Flags;        /**< Bitwise combination of flags */
+WORD ListenPort;                       /**< Port for UDP listen socket, or 0 to choose randomly */
+BYTE PrivateKey[WIREGUARD_KEY_LENGTH]; /**< Private key of interface */
+BYTE PublicKey[WIREGUARD_KEY_LENGTH];  /**< Corresponding public key of private key */
+DWORD PeersCount;                      /**< Number of peer structs following this struct */
 };
 
 /**
@@ -295,11 +295,11 @@ BOOL(WINAPI WIREGUARD_SET_CONFIGURATION_FUNC)
  *         required size.
  */
 typedef _Must_inspect_result_
-_Return_type_success_(return != FALSE)
+        _Return_type_success_(return != FALSE)
 BOOL(WINAPI WIREGUARD_GET_CONFIGURATION_FUNC)
 (_In_ WIREGUARD_ADAPTER_HANDLE Adapter,
- _Out_writes_bytes_all_(*Bytes) WIREGUARD_INTERFACE *Config,
- _Inout_ DWORD *Bytes);
+_Out_writes_bytes_all_(*Bytes) WIREGUARD_INTERFACE *Config,
+        _Inout_ DWORD *Bytes);
 
 #pragma warning(pop)
 

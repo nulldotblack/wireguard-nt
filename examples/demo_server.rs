@@ -20,21 +20,16 @@ fn main() {
     //Must be run as Administrator because we create network adapters
     //Load the wireguard dll file so that we can call the underlying C functions
     //Unsafe because we are loading an arbitrary dll file
-    let wireguard =
-        unsafe { wireguard_nt::load_from_path("examples/wireguard_nt/bin/amd64/wireguard.dll") }
-            .expect("Failed to load wireguard dll");
+    let wireguard = unsafe { wireguard_nt::load_from_path("wireguard_nt/bin/amd64/wireguard.dll") }
+        .expect("Failed to load wireguard dll");
 
     //Try to open an adapter from the given pool with the name "Demo"
-    let adapter = match wireguard_nt::Adapter::open(wireguard, "Demo") {
-        Ok(a) => a,
-        Err((_, wireguard)) =>
-        //If loading failed (most likely it didn't exist), create a new one
-        {
+    let adapter =
+        wireguard_nt::Adapter::open(wireguard, "Demo").unwrap_or_else(|(_, wireguard)| {
             wireguard_nt::Adapter::create(wireguard, "WireGuard", "Demo", None)
                 .map_err(|e| e.0)
                 .expect("Failed to create wireguard adapter!")
-        }
-    };
+        });
     let mut interface_private = [0; 32];
     let mut peer_pub = [0; 32];
 
@@ -83,7 +78,7 @@ fn main() {
                 .map(|h| SystemTime::now().duration_since(h).unwrap_or_default());
             let handshake_msg = match handshake_age {
                 Some(age) => format!("handshake performed {:.2}s ago", age.as_secs_f32()),
-                None => format!("no active handshake"),
+                None => "no active handshake".to_string(),
             };
 
             println!(
