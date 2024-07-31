@@ -20,8 +20,9 @@ fn main() {
     //Must be run as Administrator because we create network adapters
     //Load the wireguard dll file so that we can call the underlying C functions
     //Unsafe because we are loading an arbitrary dll file
-    let wireguard = unsafe { wireguard_nt::load_from_path("examples/wireguard_nt/bin/amd64/wireguard.dll") }
-        .expect("Failed to load wireguard dll");
+    let wireguard =
+        unsafe { wireguard_nt::load_from_path("examples/wireguard_nt/bin/amd64/wireguard.dll") }
+            .expect("Failed to load wireguard dll");
 
     //Try to open an adapter from the given pool with the name "Demo"
     let adapter =
