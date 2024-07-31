@@ -34,5 +34,5 @@ windows-sys = { version = "0.52", features = [
 [dev-dependencies]
 env_logger = "0.9"
 base64 = "0.13"
-x25519-dalek = { version = "=2.0.0-rc.3", default-features = false, features = ["static_secrets", "getrandom"] }
+x25519-dalek = { version = "2", default-features = false, features = ["static_secrets", "getrandom"] }
 ipnet = "2.3"
