@@ -18,7 +18,7 @@ use windows_sys::Win32::{
         Ndis,
     },
     Networking::{
-        WinSock::{IpDadStatePreferred, RouterDiscoveryDisabled, AF_INET, AF_INET6},
+        WinSock::{IpDadStatePreferred, AF_INET, AF_INET6},
         WinSock::{IN6_ADDR, IN_ADDR},
     },
 };
