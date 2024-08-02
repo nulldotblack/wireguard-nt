@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
-use rand::Rng;
 use widestring::U16CString;
 use windows_sys::Win32::{
     Foundation::{GetLastError, ERROR_MORE_DATA, ERROR_OBJECT_ALREADY_EXISTS, ERROR_SUCCESS},
@@ -149,7 +148,7 @@ impl Adapter {
 
         let guid = guid.unwrap_or_else(|| {
             let mut guid_bytes = [0u8; 16];
-            rand::thread_rng().fill(&mut guid_bytes);
+            getrandom::getrandom(&mut guid_bytes).expect("Filed to generate random bytes for guid");
             u128::from_ne_bytes(guid_bytes)
         });
         //SAFETY: guid is a unique integer so transmuting either all zeroes or the user's preferred
