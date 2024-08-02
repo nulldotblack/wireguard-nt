@@ -10,8 +10,8 @@ use log::*;
 fn main() {
     env_logger::init();
 
-    let private = boringtun::crypto::x25519::X25519SecretKey::new();
-    let public = private.public_key();
+    let private = x25519_dalek::StaticSecret::random();
+    let public = x25519_dalek::PublicKey::from(&private);
 
     let (demo_pub, internal_ip, endpoint) =
         get_demo_server_config(public.as_bytes()).expect("Failed to get demo server credentials");
@@ -25,16 +25,12 @@ fn main() {
             .expect("Failed to load wireguard dll");
 
     //Try to open an adapter from the given pool with the name "Demo"
-    let adapter = match wireguard_nt::Adapter::open(wireguard, "Demo") {
-        Ok(a) => a,
-        Err((_, wireguard)) =>
-        //If loading failed (most likely it didn't exist), create a new one
-        {
+    let adapter =
+        wireguard_nt::Adapter::open(wireguard, "Demo").unwrap_or_else(|(_, wireguard)| {
             wireguard_nt::Adapter::create(wireguard, "WireGuard", "Demo", None)
                 .map_err(|e| e.0)
                 .expect("Failed to create wireguard adapter!")
-        }
-    };
+        });
     let mut interface_private = [0; 32];
     let mut peer_pub = [0; 32];
 
@@ -83,7 +79,7 @@ fn main() {
                 .map(|h| SystemTime::now().duration_since(h).unwrap_or_default());
             let handshake_msg = match handshake_age {
                 Some(age) => format!("handshake performed {:.2}s ago", age.as_secs_f32()),
-                None => format!("no active handshake"),
+                None => "no active handshake".to_string(),
             };
 
             println!(
@@ -124,7 +120,7 @@ fn get_demo_server_config(pub_key: &[u8]) -> Result<(Vec<u8>, Ipv4Addr, SocketAd
 
     let mut encoded = base64::encode(pub_key);
     encoded.push('\n');
-    s.write(encoded.as_bytes())
+    s.write_all(encoded.as_bytes())
         .expect("Failed to write public key to server");
 
     let mut bytes = [0u8; 512];
