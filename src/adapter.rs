@@ -148,7 +148,7 @@ impl Adapter {
 
         let guid = guid.unwrap_or_else(|| {
             let mut guid_bytes = [0u8; 16];
-            getrandom::getrandom(&mut guid_bytes).expect("Filed to generate random bytes for guid");
+            getrandom::getrandom(&mut guid_bytes).expect("Failed to generate random bytes for guid");
             u128::from_ne_bytes(guid_bytes)
         });
         //SAFETY: guid is a unique integer so transmuting either all zeroes or the user's preferred
