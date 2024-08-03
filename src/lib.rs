@@ -19,21 +19,20 @@
 //!
 //! # Example
 //! ```no_run
-//! //Must be run as Administrator because we create network adapters
-//! //Load the wireguard dll file so that we can call the underlying C functions
-//! //Unsafe because we are loading an arbitrary dll file
-//! let wireguard = unsafe { wireguard_nt::load_from_path("path/to/wireguard.dll") }.expect("Failed to load wireguard dll");
-//! //Try to open an adapter with the name "Demo"
-//! let adapter = match wireguard_nt::Adapter::open(wireguard, "Demo") {
-//!     Ok(a) => a,
-//!     Err((_, wireguard)) => {
-//!         //If loading failed (most likely it didn't exist), create a new one
-//!         match wireguard_nt::Adapter::create(wireguard, "WireGuard", "Demo", None) {
-//!             Ok(a) => a,
-//!             Err((e, _)) => panic!("Failed to create adapter: {:?}", e),
-//!         }
-//!     }
-//! };
+//! // Must be run as Administrator because we create network adapters
+//!
+//! // Load the wireguard dll file so that we can call the underlying C functions
+//! // Unsafe because we are loading an arbitrary dll file
+//! let wireguard =
+//!     unsafe { wireguard_nt::load_from_path("examples/wireguard_nt/bin/amd64/wireguard.dll") }
+//!         .expect("Failed to load wireguard dll");
+//!
+//! // Try to open an adapter from the given pool with the name "Demo"
+//! let adapter =
+//!     wireguard_nt::Adapter::open(&wireguard, "Demo").unwrap_or_else(|_| {
+//!         wireguard_nt::Adapter::create(&wireguard, "WireGuard", "Demo", None)
+//!             .expect("Failed to create wireguard adapter!")
+//!     });
 //!
 //! let interface = wireguard_nt::SetInterface {
 //!     //Let the OS pick a port for us
@@ -100,9 +99,43 @@ pub use crate::adapter::*;
 pub use crate::log::*;
 pub use crate::util::get_running_driver_version;
 
-pub use wireguard_nt_raw::wireguard as dll;
-
 use std::sync::Arc;
+pub use wireguard_nt_raw::wireguard as Sys;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    /// An error caused by calling into the wireguard-nt driver
+    #[error("{0}")]
+    Driver(#[from] std::io::Error),
+    /// Unable to encode UTF-16 string due to early null
+    #[error("invalid string: {0}")]
+    Null(#[from] widestring::NulError<u16>),
+    #[error("name too large (max {})", crate::MAX_NAME)]
+    NameTooLarge,
+    /// The windows function (self.0), failed with the given error (self.1)
+    #[error("{0}: {1}")]
+    Windows(String, std::io::Error),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Clone)]
+pub struct Wireguard(Arc<Sys>);
+
+impl Wireguard {
+    pub fn into_inner(self) -> Arc<Sys> {
+        self.0
+    }
+}
+
+impl std::ops::Deref for Wireguard {
+    type Target = Sys;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Attempts to load the Wireguand NT library from the current directory using the default name "wireguard.dll".
 ///
@@ -118,7 +151,7 @@ use std::sync::Arc;
 /// Hoverer one can never be too cautious when loading a dll file.
 ///
 /// For more information see [`libloading`]'s dynamic library safety guarantees: [`libloading`][`libloading::Library::new`]
-pub unsafe fn load() -> Result<Arc<dll>, libloading::Error> {
+pub unsafe fn load() -> std::result::Result<Wireguard, libloading::Error> {
     load_from_path("wireguard")
 }
 
@@ -134,11 +167,11 @@ pub unsafe fn load() -> Result<Arc<dll>, libloading::Error> {
 /// Hoverer one can never be too cautious when loading a dll file.
 ///
 /// For more information see [`libloading`]'s dynamic library safety guarantees: [`libloading`][`libloading::Library::new`]
-pub unsafe fn load_from_path<P>(path: P) -> Result<Arc<dll>, libloading::Error>
+pub unsafe fn load_from_path<P>(path: P) -> std::result::Result<Wireguard, libloading::Error>
 where
     P: AsRef<::std::ffi::OsStr>,
 {
-    Ok(Arc::new(wireguard_nt_raw::wireguard::new(path)?))
+    Ok(Wireguard(Arc::new(wireguard_nt_raw::wireguard::new(path)?)))
 }
 
 /// Attempts to load the WireGuard NT library from an existing [`libloading::Library`].
@@ -151,14 +184,14 @@ where
 /// is inherently unsafe.
 ///
 /// For more information see [`libloading`]'s dynamic library safety guarantees: [`libloading::Library::new`]
-pub unsafe fn load_from_library<L>(library: L) -> Result<Arc<dll>, libloading::Error>
+pub unsafe fn load_from_library<L>(library: L) -> std::result::Result<Wireguard, libloading::Error>
 where
     L: Into<libloading::Library>,
 {
-    Ok(Arc::new(wireguard_nt_raw::wireguard::from_library(
-        library,
-    )?))
+    Ok(Wireguard(Arc::new(
+        wireguard_nt_raw::wireguard::from_library(library)?,
+    )))
 }
 
-/// The error type
-pub type WireGuardError = Box<dyn std::error::Error>;
+// The error type
+// pub type WireGuardError = Box<dyn std::error::Error>;
