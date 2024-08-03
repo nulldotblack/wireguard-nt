@@ -16,13 +16,12 @@ default-target = "x86_64-pc-windows-msvc"
 targets = ["aarch64-pc-windows-msvc", "i686-pc-windows-msvc", "x86_64-pc-windows-msvc"]
 
 [dependencies]
-widestring = "0.4"
-log = "0.4"
-rand = "0.8"
 bitflags = "2"
-
-libloading = "0.8"
+getrandom = "0.2.15"
 ipnet = "2.3"
+libloading = "0.8"
+log = "0.4"
+widestring = "0.4"
 windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_Networking",
@@ -32,7 +31,7 @@ windows-sys = { version = "0.52", features = [
 ]}
 
 [dev-dependencies]
-env_logger = "0.11"
 base64 = "0.13"
-x25519-dalek = { version = "2", default-features = false, features = ["static_secrets", "getrandom"] }
+env_logger = "0.11"
 ipnet = "2.3"
+x25519-dalek = { version = "2", default-features = false, features = ["static_secrets", "getrandom"] }
