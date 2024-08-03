@@ -22,15 +22,14 @@ use windows_sys::Win32::{
     },
 };
 
+use crate::{Error, Result, Wireguard};
 use crate::log::AdapterLoggingLevel;
-use crate::util;
-use crate::util::{StructReader, UnsafeHandle};
+use crate::util::{self, StructReader, UnsafeHandle};
 use crate::wireguard_nt_raw::{
     in6_addr, in_addr, wireguard, GUID, WIREGUARD_ADAPTER_HANDLE, WIREGUARD_ALLOWED_IP,
     WIREGUARD_INTERFACE, WIREGUARD_INTERFACE_FLAG, WIREGUARD_PEER, WIREGUARD_PEER_FLAG,
     _NET_LUID_LH,
 };
-use crate::WireGuardError;
 
 /// Representation of a wireGuard adapter with safe idiomatic bindings to the functionality provided by
 /// the WireGuard* C functions.
@@ -89,12 +88,8 @@ pub struct SetInterface {
 
 fn encode_name(
     name: &str,
-    wireguard: Arc<wireguard>,
-) -> Result<(U16CString, Arc<wireguard>), (WireGuardError, Arc<wireguard>)> {
-    let utf16 = match U16CString::from_str(name) {
-        Ok(u) => u,
-        Err(e) => return Err((e.into(), wireguard)),
-    };
+) -> Result<U16CString> {
+    let utf16 = U16CString::from_str(name)?;
     let max = crate::MAX_NAME;
     if utf16.len() >= max {
         //max_characters is the maximum number of characters including the null terminator. And .len() measures the
@@ -102,18 +97,9 @@ fn encode_name(
         //max_characters - 1 because the null terminator sits in the last element. A string
         //of length max_characters needs max_characters + 1 to store the null terminator so the >=
         //check holds
-        Err((
-            format!(
-                //TODO: Better error handling
-                "Length too large. Size: {}, Max: {}",
-                utf16.len(),
-                max,
-            )
-            .into(),
-            wireguard,
-        ))
+        Err(Error::NameTooLarge)
     } else {
-        Ok((utf16, wireguard))
+        Ok(utf16)
     }
 }
 
@@ -123,9 +109,9 @@ pub struct EnumeratedAdapter {
     pub name: String,
 }
 
-fn win_error(context: &str, error_code: u32) -> Result<(), Box<dyn std::error::Error>> {
+fn win_error(context: &str, error_code: u32) -> Result<()> {
     let e = std::io::Error::from_raw_os_error(error_code as i32);
-    Err(format!("{} - {}", context, e).into())
+    Err(Error::Windows(context.to_string(), e))
 }
 
 const WIREGUARD_STATE_DOWN: i32 = 0;
@@ -138,13 +124,13 @@ impl Adapter {
     ///
     /// Optionally a GUID can be specified that will become the GUID of this adapter once created.
     pub fn create(
-        wireguard: Arc<wireguard>,
+        wireguard: &Wireguard,
         pool: &str,
         name: &str,
         guid: Option<u128>,
-    ) -> Result<Adapter, (WireGuardError, Arc<wireguard>)> {
-        let (pool_utf16, wireguard) = encode_name(pool, wireguard)?;
-        let (name_utf16, wireguard) = encode_name(name, wireguard)?;
+    ) -> Result<Adapter> {
+        let pool_utf16 = encode_name(pool)?;
+        let name_utf16 = encode_name(name)?;
 
         let guid = guid.unwrap_or_else(|| {
             let mut guid_bytes = [0u8; 16];
@@ -159,7 +145,7 @@ impl Adapter {
         //the byte order of the segments of the GUID struct that are larger than a byte. Verify
         //that this works as expected
 
-        crate::log::set_default_logger_if_unset(&wireguard);
+        crate::log::set_default_logger_if_unset(wireguard);
 
         //SAFETY: the function is loaded from the wireguard dll properly, we are providing valid
         //pointers, and all the strings are correct null terminated UTF-16. This safety rationale
@@ -173,38 +159,38 @@ impl Adapter {
         };
 
         if result.is_null() {
-            Err(("Failed to create adapter".into(), wireguard))
+            Err(Error::Driver(std::io::Error::last_os_error()))
         } else {
             Ok(Self {
                 adapter: UnsafeHandle(result),
-                wireguard,
+                wireguard: Arc::clone(&wireguard.0),
             })
         }
     }
 
     /// Attempts to open an existing wireguard with name `name`.
     pub fn open(
-        wireguard: Arc<wireguard>,
+        wireguard: &Wireguard,
         name: &str,
-    ) -> Result<Adapter, (WireGuardError, Arc<wireguard>)> {
-        let (name_utf16, wireguard) = encode_name(name, wireguard)?;
+    ) -> Result<Adapter> {
+        let name_utf16 = encode_name(name)?;
 
-        crate::log::set_default_logger_if_unset(&wireguard);
+        crate::log::set_default_logger_if_unset(wireguard);
 
         let result = unsafe { wireguard.WireGuardOpenAdapter(name_utf16.as_ptr()) };
 
         if result.is_null() {
-            Err(("WireGuardOpenAdapter failed".into(), wireguard))
+            Err(Error::Driver(std::io::Error::last_os_error()))
         } else {
             Ok(Adapter {
                 adapter: UnsafeHandle(result),
-                wireguard,
+                wireguard: Arc::clone(&wireguard.0),
             })
         }
     }
 
     /// Sets the wireguard configuration of this adapter
-    pub fn set_config(&self, config: &SetInterface) -> Result<(), WireGuardError> {
+    pub fn set_config(&self, config: &SetInterface) -> Result<()> {
         bitflags::bitflags! {
             struct InterfaceFlags: i32 {
                 const HAS_PUBLIC_KEY =  1 << 0;
@@ -345,7 +331,7 @@ impl Adapter {
         };
 
         match result {
-            0 => Err("WireGuardSetConfiguration failed".into()),
+            0 => Err(Error::Driver(std::io::Error::last_os_error())),
             _ => Ok(()),
         }
     }
@@ -356,7 +342,7 @@ impl Adapter {
         &self,
         interface_addrs: &[IpNet],
         config: &SetInterface,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<()> {
         let luid = self.get_luid();
         unsafe {
             for allowed_ip in config.peers.iter().flat_map(|p| p.allowed_ips.iter()) {
@@ -390,7 +376,7 @@ impl Adapter {
 
                 let err = CreateIpForwardEntry2(&default_route);
                 if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
-                    return win_error("Failed to set default route", err);
+                    return win_error("CreateIpForwardEntry2", err);
                 }
             }
 
@@ -427,13 +413,13 @@ impl Adapter {
 
                 let err = CreateUnicastIpAddressEntry(&address_row);
                 if err != ERROR_SUCCESS && err != ERROR_OBJECT_ALREADY_EXISTS {
-                    return win_error("Failed to set IP interface", err);
+                    return win_error("CreateUnicastIpAddressEntry", err);
                 }
             }
 
             let err = GetIpInterfaceEntry(&mut ip_interface);
             if err != ERROR_SUCCESS {
-                return win_error("Failed to get IP interface", err);
+                return win_error("GetIpInterfaceEntry", err);
             }
             ip_interface.UseAutomaticMetric = 0;
             ip_interface.Metric = 0;
@@ -441,7 +427,7 @@ impl Adapter {
             ip_interface.SitePrefixLength = 0;
             let err = SetIpInterfaceEntry(&mut ip_interface);
             if err != ERROR_SUCCESS {
-                return win_error("Failed to set metric and MTU", err);
+                return win_error("SetIpInterfaceEntry", err);
             }
 
             Ok(())
@@ -449,7 +435,7 @@ impl Adapter {
     }
 
     /// Get the state of this adapter
-    pub fn is_up(&self) -> Result<bool, std::io::Error> {
+    pub fn is_up(&self) -> Result<bool> {
         let mut state = 0;
         let success = unsafe {
             self.wireguard
@@ -459,12 +445,12 @@ impl Adapter {
         if success {
             Ok(state == WIREGUARD_STATE_UP)
         } else {
-            Err(std::io::Error::last_os_error())
+            Err(Error::Driver(std::io::Error::last_os_error()))
         }
     }
 
     /// Puts this adapter into the up state
-    pub fn up(&self) -> Result<(), std::io::Error> {
+    pub fn up(&self) -> Result<()> {
         let success = unsafe {
             self.wireguard
                 .WireGuardSetAdapterState(self.adapter.0, WIREGUARD_STATE_UP)
@@ -473,12 +459,12 @@ impl Adapter {
         if success {
             Ok(())
         } else {
-            Err(std::io::Error::last_os_error())
+            Err(Error::Driver(std::io::Error::last_os_error()))
         }
     }
 
     /// Puts this adapter into the down state
-    pub fn down(&self) -> Result<(), std::io::Error> {
+    pub fn down(&self) -> Result<()> {
         let success = unsafe {
             self.wireguard
                 .WireGuardSetAdapterState(self.adapter.0, WIREGUARD_STATE_DOWN)
@@ -487,7 +473,7 @@ impl Adapter {
         if success {
             Ok(())
         } else {
-            Err(std::io::Error::last_os_error())
+            Err(Error::Driver(std::io::Error::last_os_error()))
         }
     }
 
