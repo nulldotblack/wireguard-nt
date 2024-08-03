@@ -453,7 +453,8 @@ impl Adapter {
         let mut state = 0;
         let success = unsafe {
             self.wireguard
-                .WireGuardGetAdapterState(self.adapter.0, &mut state ) != 0
+                .WireGuardGetAdapterState(self.adapter.0, &mut state)
+                != 0
         };
         if success {
             Ok(state == WIREGUARD_STATE_UP)
