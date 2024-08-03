@@ -22,7 +22,6 @@ use windows_sys::Win32::{
     },
 };
 
-use crate::{Error, Result, Wireguard};
 use crate::log::AdapterLoggingLevel;
 use crate::util::{self, StructReader, UnsafeHandle};
 use crate::wireguard_nt_raw::{
@@ -30,6 +29,7 @@ use crate::wireguard_nt_raw::{
     WIREGUARD_INTERFACE, WIREGUARD_INTERFACE_FLAG, WIREGUARD_PEER, WIREGUARD_PEER_FLAG,
     _NET_LUID_LH,
 };
+use crate::{Error, Result, Wireguard};
 
 /// Representation of a wireGuard adapter with safe idiomatic bindings to the functionality provided by
 /// the WireGuard* C functions.
@@ -86,9 +86,7 @@ pub struct SetInterface {
     pub peers: Vec<SetPeer>,
 }
 
-fn encode_name(
-    name: &str,
-) -> Result<U16CString> {
+fn encode_name(name: &str) -> Result<U16CString> {
     let utf16 = U16CString::from_str(name)?;
     let max = crate::MAX_NAME;
     if utf16.len() >= max {
@@ -169,10 +167,7 @@ impl Adapter {
     }
 
     /// Attempts to open an existing wireguard with name `name`.
-    pub fn open(
-        wireguard: &Wireguard,
-        name: &str,
-    ) -> Result<Adapter> {
+    pub fn open(wireguard: &Wireguard, name: &str) -> Result<Adapter> {
         let name_utf16 = encode_name(name)?;
 
         crate::log::set_default_logger_if_unset(wireguard);

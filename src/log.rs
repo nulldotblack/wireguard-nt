@@ -5,10 +5,7 @@ use widestring::U16CStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Sets the logger wireguard will use when logging. Maps to the wireguardSetLogger C function
-pub fn set_logger(
-    wireguard: &crate::Wireguard,
-    f: wireguard_nt_raw::WIREGUARD_LOGGER_CALLBACK,
-) {
+pub fn set_logger(wireguard: &crate::Wireguard, f: wireguard_nt_raw::WIREGUARD_LOGGER_CALLBACK) {
     unsafe { wireguard.WireGuardSetLogger(f) };
 }
 

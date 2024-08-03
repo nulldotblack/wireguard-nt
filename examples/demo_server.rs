@@ -26,11 +26,10 @@ fn main() {
             .expect("Failed to load wireguard dll");
 
     // Try to open an adapter from the given pool with the name "Demo"
-    let adapter =
-        wireguard_nt::Adapter::open(&wireguard, "Demo").unwrap_or_else(|_| {
-            wireguard_nt::Adapter::create(&wireguard, "WireGuard", "Demo", None)
-                .expect("Failed to create wireguard adapter!")
-        });
+    let adapter = wireguard_nt::Adapter::open(&wireguard, "Demo").unwrap_or_else(|_| {
+        wireguard_nt::Adapter::create(&wireguard, "WireGuard", "Demo", None)
+            .expect("Failed to create wireguard adapter!")
+    });
     let mut interface_private = [0; 32];
     let mut peer_pub = [0; 32];
 

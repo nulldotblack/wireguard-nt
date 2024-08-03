@@ -20,7 +20,7 @@
 //! # Example
 //! ```no_run
 //! // Must be run as Administrator because we create network adapters
-//! 
+//!
 //! // Load the wireguard dll file so that we can call the underlying C functions
 //! // Unsafe because we are loading an arbitrary dll file
 //! let wireguard =
@@ -99,8 +99,8 @@ pub use crate::adapter::*;
 pub use crate::log::*;
 pub use crate::util::get_running_driver_version;
 
-pub use wireguard_nt_raw::wireguard as Sys;
 use std::sync::Arc;
+pub use wireguard_nt_raw::wireguard as Sys;
 
 use thiserror::Error;
 
@@ -111,7 +111,7 @@ pub enum Error {
     Driver(#[from] std::io::Error),
     /// Unable to encode UTF-16 string due to early null
     #[error("invalid string: {0}")]
-    Null(#[from] widestring::NulError::<u16>),
+    Null(#[from] widestring::NulError<u16>),
     #[error("name too large (max {})", crate::MAX_NAME)]
     NameTooLarge,
     /// The windows function (self.0), failed with the given error (self.1)
@@ -188,9 +188,9 @@ pub unsafe fn load_from_library<L>(library: L) -> std::result::Result<Wireguard,
 where
     L: Into<libloading::Library>,
 {
-    Ok(Wireguard(Arc::new(wireguard_nt_raw::wireguard::from_library(
-        library,
-    )?)))
+    Ok(Wireguard(Arc::new(
+        wireguard_nt_raw::wireguard::from_library(library)?,
+    )))
 }
 
 // The error type
