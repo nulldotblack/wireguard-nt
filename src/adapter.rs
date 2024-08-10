@@ -332,11 +332,24 @@ impl Adapter {
     }
 
     /// Assigns this adapter an ip address and adds route(s) so that packets sent
-    /// within the `interface_addr` IpNet will be sent across the WireGuard VPN
+    /// within the `interface_addr` ipnet will be sent across the WireGuard VPN
     pub fn set_default_route(
         &self,
         interface_addrs: &[IpNet],
         config: &SetInterface,
+    ) -> Result<()> {
+        // Set the route with metric = 0 (highest priority / default)
+        self.set_route_with_metric(interface_addrs, config, 0)
+    }
+
+    /// Assigns this adapter an ip address and adds route(s) so that packets sent
+    /// within the `interface_addr` ipnet will be sent across the WireGuard VPN
+    /// if no route with lower metric (higher priority) is found
+    pub fn set_route_with_metric(
+        &self,
+        interface_addrs: &[IpNet],
+        config: &SetInterface,
+        metric: u32,
     ) -> Result<()> {
         let luid = self.get_luid();
         unsafe {
@@ -417,7 +430,7 @@ impl Adapter {
                 return win_error("GetIpInterfaceEntry", err);
             }
             ip_interface.UseAutomaticMetric = 0;
-            ip_interface.Metric = 0;
+            ip_interface.Metric = metric;
             ip_interface.NlMtu = 1420;
             ip_interface.SitePrefixLength = 0;
             let err = SetIpInterfaceEntry(&mut ip_interface);
