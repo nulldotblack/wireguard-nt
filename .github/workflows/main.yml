@@ -44,3 +44,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features
+
+# TODO(Troy): re-enable after we bump to fix breaking change in winapi breaking our old compilation
+#  semver:
+#    name: Check semver
+#    runs-on: windows-latest
+#    steps:
+#      - uses: actions/checkout@v2
+#      - uses: actions-rs/toolchain@v1
+#        with:
+#          profile: minimal
+#          toolchain: stable
+#          override: true
+#      - uses: obi1kenobi/cargo-semver-checks-action@v2

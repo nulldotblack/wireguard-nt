@@ -17,12 +17,13 @@ targets = ["aarch64-pc-windows-msvc", "i686-pc-windows-msvc", "x86_64-pc-windows
 
 [dependencies]
 bitflags = "2"
-getrandom = "0.2.15"
+getrandom = "0.2"
 ipnet = "2.3"
 libloading = "0.8"
 log = "0.4"
+thiserror = "1.0"
 widestring = "0.4"
-windows-sys = { version = "0.52", features = [
+windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Networking",
     "Win32_Networking_WinSock",

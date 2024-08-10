@@ -3,13 +3,9 @@ use log::*;
 use widestring::U16CStr;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 /// Sets the logger wireguard will use when logging. Maps to the wireguardSetLogger C function
-pub fn set_logger(
-    wireguard: &Arc<wireguard_nt_raw::wireguard>,
-    f: wireguard_nt_raw::WIREGUARD_LOGGER_CALLBACK,
-) {
+pub fn set_logger(wireguard: &crate::Wireguard, f: wireguard_nt_raw::WIREGUARD_LOGGER_CALLBACK) {
     unsafe { wireguard.WireGuardSetLogger(f) };
 }
 
@@ -54,7 +50,7 @@ pub extern "C" fn default_logger(
     }
 }
 
-pub(crate) fn set_default_logger_if_unset(wireguard: &Arc<wireguard_nt_raw::wireguard>) {
+pub(crate) fn set_default_logger_if_unset(wireguard: &crate::Wireguard) {
     if !SET_LOGGER.load(Ordering::Relaxed) {
         set_logger(wireguard, Some(default_logger));
         SET_LOGGER.store(true, Ordering::Relaxed);
