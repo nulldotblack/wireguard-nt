@@ -4,6 +4,21 @@ This format is based on [Keep a Changelog](https://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](https://semver.org).
 
 
+## [0.5.0] - 2024-08-10
+
+### Changes
+
+- Fixes compilation failure due to breaking change in winapi. Use windows-sys now that it is the agreed-on crate: https://github.com/nulldotblack/wireguard-nt/pull/15
+- Adds a proper error type for this crate: https://github.com/nulldotblack/wireguard-nt/pull/17
+- Use `getrandom` over `rand` to reduce dependency tree: https://github.com/nulldotblack/wireguard-nt/pull/16
+- Allow creating routes with custom metric: https://github.com/nulldotblack/wireguard-nt/pull/18
+
+
+### Breaking Changes
+
+- Any function taking in a `wireguard_nt_raw::wireguard`, a newtype wrapper `wireguard_nt::Wireguard` is used instead
+- Any function previously returning an `Result<_, Box<dyn std::error::Error>>`, a proper error type is now used across this crate
+
 ## [0.4.0] - 2024-04-11
 
 ### Fixed
